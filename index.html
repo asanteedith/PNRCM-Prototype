@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNRCM &mdash; Revenue Cycle Operating System</title>
+<style>
+  :root{
+    --ink:#0f2433;
+    --muted:#5a6b78;
+    --line:#d4dde3;
+    --bg:#f7f9fb;
+    --surface:#ffffff;
+    --accent:#005e8a;
+    --accent-dark:#003d5c;
+    --accent-light:#e6f2f8;
+    --success:#1e7a46;
+    --success-bg:#e9f4ee;
+    --warning:#8a5a00;
+    --warning-bg:#fdf6e9;
+    --danger:#a33333;
+    --danger-bg:#f9e7e7;
+    --info:#2c6e8f;
+    --info-bg:#e7f1f6;
+    --radius:3px;
+    --font-sans:"Helvetica Neue","Arial",sans-serif;
+    --font-serif:"Georgia","Times New Roman",serif;
+    --shadow:0 1px 3px rgba(0,0,0,0.08);
+    --shadow-lg:0 4px 12px rgba(0,0,0,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--ink);font-size:12px;line-height:1.5;height:100vh;overflow:hidden}
+  h1,h2,h3,h4{font-family:var(--font-serif);font-weight:600;color:var(--ink)}
+  p{margin:0 0 8px 0}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  button{cursor:pointer;font:inherit}
+  input,select,textarea{font:inherit;padding:5px 7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:12px;border-radius:var(--radius)}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:11px;border-radius:var(--radius);cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.primary:hover{background:var(--accent-dark)}
+  .btn.sm{padding:3px 8px;font-size:10px}
+  .btn.danger{border-color:var(--danger);color:var(--danger)}
+  .btn.danger:hover{background:var(--danger-bg)}
+  .btn.secondary{background:#f2f6f9;color:var(--ink);border-color:var(--line)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+  .btn.ghost:hover{background:var(--accent-light)}
+  .btn:disabled{opacity:0.5;cursor:not-allowed}
+
+  /* Layout */
+  .app{display:flex;height:100vh;overflow:hidden}
+  .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--line);flex-shrink:0;z-index:30;display:flex;flex-direction:column}
+  .sidebar-brand{padding:16px 18px;border-bottom:1px solid var(--line);background:#ffffff}
+  .sidebar-brand .app-name{font-family:var(--font-serif);font-size:16px;font-weight:700;color:var(--ink);letter-spacing:0.02em}
+  .sidebar-brand .app-sub{font-size:8.5px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:0.08em}
+  .sidebar-brand .demo-badge{font-size:7.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--warning);background:var(--warning-bg);padding:1px 6px;border-radius:var(--radius);margin-top:6px;display:inline-block;border:1px solid var(--warning)}
+  .sidebar nav{flex:1;overflow-y:auto;padding:8px 0}
+  .nav-group{margin-bottom:8px}
+  .nav-group-title{font-size:8px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);padding:6px 18px;font-weight:700}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:7px 18px;color:var(--ink);font-size:12px;border-left:3px solid transparent;cursor:pointer;text-decoration:none}
+  .nav-item:hover{background:var(--accent-light);color:var(--accent-dark)}
+  .nav-item.active{background:var(--accent-light);color:var(--accent-dark);border-left-color:var(--accent)}
+  .nav-item .icon{font-size:13px;width:18px;text-align:center}
+
+  .main{flex:1;overflow:auto;background:var(--bg)}
+  .topbar{height:56px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:0 22px;position:sticky;top:0;z-index:20}
+  .topbar-left{display:flex;align-items:center;gap:16px}
+  .topbar-left .brand{font-family:var(--font-serif);font-size:14px;font-weight:700;color:var(--ink)}
+  .topbar-left .env-tag{font-size:8px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);background:#f2f6f9;padding:2px 8px;border:1px solid var(--line);border-radius:var(--radius)}
+  .status-row{display:flex;align-items:center;gap:10px;font-size:10px;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  .topbar-right{display:flex;align-items:center;gap:10px}
+  .facility-picker{padding:4px 9px;font-size:11px;border-radius:var(--radius)}
+  .role-picker{padding:4px 9px;font-size:11px;border-radius:var(--radius)}
+  .user-chip{font-size:10px;color:var(--muted);padding:4px 10px;background:#f2f6f9;border-radius:var(--radius);border:1px solid var(--line)}
+
+  .canvas{padding:20px 24px}
+  .section{display:none}
+  .section.active{display:block}
+  .page-header{margin-bottom:18px}
+  .page-title{font-family:var(--font-serif);font-size:16px;margin:0 0 3px 0;color:var(--ink)}
+  .page-sub{font-size:10px;color:var(--muted);margin:0}
+  .hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+  .section-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+
+  /* Tables */
+  table.data{width:100%;border-collapse:collapse;font-size:11px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  table.data th{background:#f2f6f9;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:0.08em;padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);font-weight:700}
+  table.data td{padding:6px 8px;border-bottom:1px solid #e7edf2;vertical-align:top}
+  table.data tr:last-child td{border-bottom:none}
+  table.data tr:hover td{background:var(--accent-light)}
+  table.data .mono{font-family:"Courier New",Courier,monospace;font-size:10px;color:var(--ink)}
+  table.data tr.selected td{background:#e3f0f7;border-left:3px solid var(--accent)}
+
+  /* Status */
+  .status{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:600;padding:1px 6px;border:1px solid;border-radius:var(--radius)}
+  .status.open{background:#fdf6e9;color:#7a4e00;border-color:#e5c98a}
+  .status.pending{background:#eef3f8;color:#1d4e6b;border-color:#b9ccd9}
+  .status.approved{background:#e9f4ee;color:#1e7a46;border-color:#b9dcc9}
+  .status.rejected{background:#f9e7e7;color:#a33333;border-color:#e2b9b9}
+  .status.paid{background:#e9f4ee;color:#1e7a46;border-color:#b9dcc9}
+  .status.submitted{background:#eef3f8;color:#1d4e6b;border-color:#b9ccd9}
+  .status.draft{color:var(--muted);border-color:var(--line);background:#fafbfc}
+  .status.closed{color:var(--muted);border-color:var(--line);background:#fafbfc}
+  .status.needs-review{background:#fdf6e9;color:#7a4e00;border-color:#e5c98a}
+  .status.completed{background:#e9f4ee;color:#1e7a46;border-color:#b9dcc9}
+  .status.denied{background:#f9e7e7;color:#a33333;border-color:#e2b9b9}
+  .status.vetted{background:#e7f1f6;color:#2c6e8f;border-color:#b9d4e0}
+
+  /* Metrics */
+  .metric-strip{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .metric{flex:1;min-width:150px;background:var(--surface);border:1px solid var(--line);padding:11px 13px;border-radius:var(--radius);box-shadow:var(--shadow)}
+  .metric .label{font-size:8px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:3px}
+  .metric .value{font-family:var(--font-serif);font-size:17px;font-weight:700;color:var(--ink)}
+  .metric .sub{font-size:8.5px;color:var(--muted)}
+  .metric.trend-up .sub{color:var(--success)}
+  .metric.trend-down .sub{color:var(--danger)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .card .card-title{font-family:var(--font-serif);font-size:13px;margin:0 0 9px 0;color:var(--ink);border-bottom:1px solid var(--line);padding-bottom:6px}
+
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px}
+  @media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}}
+
+  .empty{padding:16px;text-align:center;color:var(--muted);border:1px dashed var(--line);background:#fafbfc;border-radius:var(--radius)}
+  .small{font-size:10px;color:var(--muted)}
+  .tag{font-size:8px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);background:#f2f6f9;padding:1px 6px;border:1px solid var(--line);border-radius:var(--radius)}
+  .notice{font-size:9px;color:var(--muted);border-top:1px solid var(--line);padding-top:7px;margin-top:9px}
+  .flex{display:flex;gap:9px;align-items:flex-start;flex-wrap:wrap}
+  .flex-1{flex:1}
+  .mono{font-family:"Courier New",Courier,monospace;font-size:10px}
+
+  /* Agent grid */
+  .agent-card{border:1px solid var(--line);border-radius:var(--radius);padding:11px 12px;margin-bottom:10px;background:var(--surface)}
+  .agent-card .agent-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+  .agent-card .agent-name{font-weight:700;font-size:12px;color:var(--ink)}
+  .agent-card .agent-role{font-size:9px;color:var(--muted)}
+  .agent-card .agent-status{font-size:8px;padding:2px 6px;border-radius:var(--radius);text-transform:uppercase;letter-spacing:0.06em}
+  .agent-status.idle{background:#fafbfc;color:var(--muted);border:1px solid var(--line)}
+  .agent-status.running{background:#e7f1f6;color:#2c6e8f;border:1px solid #b9d4e0}
+  .agent-status.completed{background:var(--success-bg);color:var(--success);border:1px solid #b9dcc9}
+  .agent-status.needs-review{background:var(--warning-bg);color:var(--warning);border:1px solid #e5c98a}
+  .agent-card .agent-meta{font-size:9px;color:var(--muted);margin-top:4px}
+
+  /* Modal */
+  .modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(15,36,51,0.35)}
+  .modal.open{display:flex}
+  .modal-content{background:#ffffff;border:1px solid var(--line);border-radius:var(--radius);width:min(94vw,900px);max-height:92vh;overflow:auto;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .modal-title{font-family:var(--font-serif);font-size:14px;margin:0;color:var(--ink)}
+  .modal-close{font-size:18px;line-height:1;color:var(--muted);background:none;border:none;padding:0 4px;cursor:pointer}
+  .modal-body{padding:16px;overflow:auto;max-height:60vh}
+  .modal-footer{padding:11px 16px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+
+  /* Demo mode */
+  .demo-banner{position:fixed;top:0;left:0;right:0;background:var(--warning);color:#fff;padding:6px 20px;font-size:11px;text-align:center;z-index:1000;letter-spacing:0.04em}
+  .demo-banner .demo-action{margin-left:16px;color:#fff;text-decoration:underline;cursor:pointer}
+  .demo-panel{position:fixed;right:0;top:56px;bottom:0;width:380px;background:var(--surface);border-left:1px solid var(--line);z-index:950;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform 0.3s}
+  .demo-panel.open{transform:translateX(0)}
+  .demo-panel-header{padding:12px 16px;border-bottom:1px solid var(--line);background:#f2f6f9}
+  .demo-panel-title{font-family:var(--font-serif);font-size:14px;font-weight:700;color:var(--ink)}
+  .demo-panel-body{flex:1;overflow-y:auto;padding:12px 16px}
+  .demo-step{padding:10px 0;border-bottom:1px solid #eef3f8}
+  .demo-step:last-child{border-bottom:none}
+  .demo-step .step-num{font-size:9px;color:var(--accent);font-weight:700;margin-right:6px}
+  .demo-step .step-name{font-weight:600;font-size:11.5px}
+  .demo-step .step-desc{font-size:9.5px;color:var(--muted);margin-top:2px}
+  .demo-step .step-status{font-size:8px;margin-top:4px;display:inline-block}
+  .demo-controls{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+
+  .synthetic-badge{font-size:7.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--warning);background:var(--warning-bg);padding:1px 5px;border-radius:var(--radius);border:1px solid var(--warning);margin-left:6px}
+
+  /* Timeline */
+  .timeline{position:relative;padding-left:24px}
+  .timeline::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:2px;background:var(--line)}
+  .timeline-item{position:relative;margin-bottom:12px;padding-bottom:4px}
+  .timeline-item::before{content:'';position:absolute;left:-8px;top:2px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
+  .timeline-item.completed::before{background:var(--success)}
+  .timeline-item .time{font-size:8.5px;color:var(--muted)}
+  .timeline-item .action{font-size:11px;font-weight:600}
+  .timeline-item .detail{font-size:9.5px;color:var(--muted);margin-top:1px}
+
+  .kpi-big{font-size:32px;font-weight:700;font-family:var(--font-serif)}
+  .alert-item{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:8px;background:var(--surface)}
+  .alert-item.high{border-left:3px solid var(--danger)}
+  .alert-item.medium{border-left:3px solid var(--warning)}
+  .alert-item.low{border-left:3px solid var(--info)}
+  .alert-item .alert-title{font-weight:700;font-size:11px;color:var(--ink)}
+  .alert-item .alert-meta{font-size:9px;color:var(--muted);margin-top:2px}
+</style>
+</head>
+<body>
+
+<div class="demo-banner" id="demoBanner" style="display:none">
+  <span>DEMO MODE &mdash; Synthetic demonstration data. No real patients, payers, or financial transactions.</span>
+  <span class="demo-action" onclick="toggleDemoPanel()">Configure Demo</span>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="app-name">PNRCM</div>
+      <div class="app-sub">Revenue Cycle Operating System</div>
+      <span class="demo-badge">SYNTHETIC DATA</span>
+    </div>
+    <nav>
+      <div class="nav-group"><div class="nav-group-title">Command</div>
+        <a class="nav-item active" id="nav-command" onclick="showSection('command')"><span class="icon">&#9881;</span>Command Center</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Patient Access</div>
+        <a class="nav-item" id="nav-registration" onclick="showSection('registration')"><span class="icon">&#128100;</span>Registration &amp; Eligibility</a>
+        <a class="nav-item" id="nav-authorization" onclick="showSection('authorization')"><span class="icon">&#128205;</span>Prior Authorization</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Clinical &amp; Charges</div>
+        <a class="nav-item" id="nav-encounters" onclick="showSection('encounters')"><span class="icon">&#128197;</span>Encounter Workspace</a>
+        <a class="nav-item" id="nav-documentation" onclick="showSection('documentation')"><span class="icon">&#128221;</span>Documentation &amp; Charges</a>
+        <a class="nav-item" id="nav-coding" onclick="showSection('coding')"><span class="icon">&#128219;</span>AI Coding Review</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Claims</div>
+        <a class="nav-item" id="nav-claims" onclick="showSection('claims')"><span class="icon">&#128176;</span>Claims Management</a>
+        <a class="nav-item" id="nav-claim-prep" onclick="showSection('claim-prep')"><span class="icon">&#128218;</span>Claim Preparation</a>
+        <a class="nav-item" id="nav-claim-submit" onclick="showSection('claim-submit')"><span class="icon">&#128226;</span>Submission &amp; Payer</a>
+        <a class="nav-item" id="nav-claimit" onclick="showSection('claimit')"><span class="icon">&#128204;</span>CLAIM-it Integration</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Revenue Integrity</div>
+        <a class="nav-item" id="nav-denials" onclick="showSection('denials')"><span class="icon">&#128169;</span>Denial Management</a>
+        <a class="nav-item" id="nav-ar" onclick="showSection('ar')"><span class="icon">&#128177;</span>AR &amp; Follow-Up</a>
+        <a class="nav-item" id="nav-payments" onclick="showSection('payments')"><span class="icon">&#128179;</span>Payments &amp; Reconciliation</a>
+        <a class="nav-item" id="nav-revenue-integrity" onclick="showSection('revenue-integrity')"><span class="icon">&#128177;</span>Revenue Integrity</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Intelligence</div>
+        <a class="nav-item" id="nav-analytics" onclick="showSection('analytics')"><span class="icon">&#128208;</span>Analytics &amp; Reports</a>
+        <a class="nav-item" id="nav-ai-orchestrator" onclick="showSection('ai-orchestrator')"><span class="icon">&#128169;</span>AI Orchestrator</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Governance</div>
+        <a class="nav-item" id="nav-review" onclick="showSection('review')"><span class="icon">&#128214;</span>Human Review Center</a>
+        <a class="nav-item" id="nav-patient" onclick="showSection('patient-finance')"><span class="icon">&#128101;</span>Patient Finance</a>
+      </div>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand">PNRCM Revenue OS</div>
+        <div class="env-tag">GHS &bull; Synthetic Demo</div>
+        <div class="status-row"><span class="dot"></span>System online</div>
+      </div>
+      <div class="topbar-right">
+        <select class="facility-picker" id="facility-picker" onchange="facilityChanged()"></select>
+        <select class="role-picker" id="role-picker" onchange="roleChanged()"></select>
+        <div class="user-chip" id="user-chip">Demo User</div>
+        <button class="btn sm secondary" onclick="resetData()">Reset</button>
+        <button class="btn sm primary" onclick="seedData()">Seed Data</button>
+      </div>
+    </header>
+
+    <div class="canvas">
+      <!-- A. Revenue Command Center -->
+      <section id="command" class="section active">
+        <div class="page-header">
+          <h1 class="page-title">Revenue Command Center</h1>
+          <p class="page-sub">Real-time operational overview of the revenue cycle. Metrics calculated from live SQLite records.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="cmd-facility" onchange="cmdRefresh()"><option value="">All Facilities</option></select>
+          <select id="cmd-payer" onchange="cmdRefresh()"><option value="">All Payers</option></select>
+          <select id="cmd-stage" onchange="cmdRefresh()"><option value="">All Stages</option></select>
+          <input type="text" id="cmd-search" placeholder="Search&#8230;" oninput="cmdRefresh()" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius)">
+          <button class="btn sm" onclick="cmdRefresh()">Refresh</button>
+        </div>
+        <div class="metric-strip" id="command-metrics"></div>
+        <div class="grid-2" style="margin-bottom:14px">
+          <div class="card">
+            <div class="card-title">Alerts Requiring Attention</div>
+            <div id="command-alerts" class="empty">Loading&#8230;</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Open Review Tasks</div>
+            <div id="command-reviews" class="empty">Loading&#8230;</div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Recent Activity</div>
+            <div id="command-activity" class="empty">Loading&#8230;</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Revenue Cycle Stage Distribution</div>
+            <div id="command-stages" class="empty">Loading&#8230;</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- B. Encounter Workspace -->
+      <section id="encounters" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Encounter Financial Workspace</h1>
+          <p class="page-sub">Complete financial lifecycle of each patient encounter, from registration to reconciliation.</p>
+        </div>
+        <div class="section-toolbar">
+          <input type="text" id="enc-filter" placeholder="Search patient, encounter, MRN&#8230;" oninput="encList()">
+          <select id="enc-dept-filter" onchange="encList()"><option value="">All Departments</option></select>
+          <select id="enc-status-filter" onchange="encList()"><option value="">All Statuses</option></select>
+          <select id="enc-payer-filter" onchange="encList()"><option value="">All Payers</option></select>
+          <button class="btn sm" onclick="encList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr>
+            <th>Encounter</th><th>Patient</th><th>Department</th><th>Status</th><th>Payer</th><th>Charges</th><th>Outstanding</th><th>Stage</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="enc-table-body"></tbody>
+        </table>
+        <div class="notice" id="enc-detail-notice" style="margin-top:10px"></div>
+      </section>
+
+      <!-- C. Registration & Eligibility -->
+      <section id="registration" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Registration &amp; Eligibility Intelligence</h1>
+          <p class="page-sub">Patient registration validation, coverage verification, eligibility checks, and authorization requirements.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="reg-filter" onchange="regList()"><option value="">All Patients</option><option value="issues">Registration Issues</option><option value="eligibility">Eligibility Pending</option><option value="clean">Clean Records</option></select>
+          <button class="btn sm" onclick="regList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>MRN</th><th>Patient</th><th>Payer Type</th><th>Missing Fields</th><th>Duplicate Risk</th><th>Eligibility</th><th>Financial Clearance</th><th>Actions</th></tr></thead>
+          <tbody id="reg-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- D. Prior Authorization -->
+      <section id="authorization" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Prior Authorization Management</h1>
+          <p class="page-sub">Authorization requests, payer requirements, document tracking, and approval workflow.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="auth-filter" onchange="authList()"><option value="">All Authorizations</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="documents_requested">Documents Requested</option></select>
+          <button class="btn sm" onclick="authList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Auth Number</th><th>Patient</th><th>Encounter</th><th>Payer</th><th>Procedure</th><th>Status</th><th>Requested</th><th>Expiry</th><th>Actions</th></tr></thead>
+          <tbody id="auth-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- E. Documentation & Charges -->
+      <section id="documentation" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Documentation &amp; Charge Capture Intelligence</h1>
+          <p class="page-sub">Cross-document validation between clinical notes, charges, diagnosis codes, procedure codes, and claim lines.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="doc-filter" onchange="docList()"><option value="">All Reviews</option><option value="pending">Pending Review</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
+          <button class="btn sm" onclick="docList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Encounter</th><th>Patient</th><th>Department</th><th>Findings</th><th>AI Recommendation</th><th>Human Review</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="doc-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- F. AI Coding Review -->
+      <section id="coding" class="section">
+        <div class="page-header">
+          <h1 class="page-title">AI-Assisted Coding Review</h1>
+          <p class="page-sub">AI-suggested diagnosis and procedure codes with confidence scores, evidence, and human coder review.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="code-filter" onchange="codeList()"><option value="">All Suggestions</option><option value="pending_review">Pending Review</option><option value="reviewed_approve">Approved</option><option value="reviewed_reject">Rejected</option><option value="reviewed_correct">Corrected</option></select>
+          <button class="btn sm" onclick="codeList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Encounter</th><th>Code Type</th><th>Code</th><th>Description</th><th>Confidence</th><th>Evidence</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="code-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- G. Claim Preparation -->
+      <section id="claim-prep" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Claim Preparation &amp; Scrubbing</h1>
+          <p class="page-sub">Claim validation, edit rules, duplicate detection, missing field identification, and claim readiness.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="clmprep-filter" onchange="clmprepList()"><option value="">All Claims</option><option value="draft">Draft</option><option value="vetted">Vetted</option><option value="needs_correction">Needs Correction</option><option value="ready">Ready for Review</option></select>
+          <button class="btn sm" onclick="clmprepList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Claim</th><th>Encounter</th><th>Payer</th><th>Charges</th><th>Validation</th><th>Issues</th><th>Readiness</th><th>Actions</th></tr></thead>
+          <tbody id="clmprep-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- H. Claim Submission & Payer Response -->
+      <section id="claim-submit" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Claim Submission &amp; Payer Response</h1>
+          <p class="page-sub">Claim lifecycle from submission through payer acknowledgment, acceptance, rejection, and payment.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="clmsub-filter" onchange="clmsubList()"><option value="">All Claims</option><option value="submitted">Submitted</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="paid">Paid</option></select>
+          <button class="btn sm" onclick="clmsubList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Claim</th><th>Encounter</th><th>Payer</th><th>Amount</th><th>Status</th><th>Submitted</th><th>Response</th><th>Actions</th></tr></thead>
+          <tbody id="clmsub-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- I. Denial Management -->
+      <section id="denials" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Denial Management &amp; Intelligence</h1>
+          <p class="page-sub">Denial inventory, root cause analysis, appeal eligibility, corrective actions, and resubmission tracking.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="den-filter" onchange="denList()"><option value="">All Denials</option><option value="open">Open</option><option value="appealed">Appealed</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+          <button class="btn sm" onclick="denList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Claim</th><th>Payer</th><th>Denied Amount</th><th>Category</th><th>Root Cause</th><th>Deadline</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="den-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- J. AR & Follow-Up -->
+      <section id="ar" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Accounts Receivable &amp; Follow-Up</h1>
+          <p class="page-sub">A/R aging buckets, outstanding claims, payer follow-up tasks, account priority, and escalation.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="ar-filter" onchange="arList()"><option value="">All Accounts</option><option value="0-30">0-30 Days</option><option value="31-60">31-60 Days</option><option value="61-90">61-90 Days</option><option value="90+">90+ Days</option></select>
+          <button class="btn sm" onclick="arList()">Refresh</button>
+        </div>
+        <div class="metric-strip" id="ar-metrics"></div>
+        <table class="data">
+          <thead><tr><th>Claim</th><th>Patient</th><th>Payer</th><th>Outstanding</th><th>Age</th><th>Priority</th><th>Next Action</th><th>Assigned</th><th>Actions</th></tr></thead>
+          <tbody id="ar-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- K. Payments & Reconciliation -->
+      <section id="payments" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Payments &amp; Reconciliation</h1>
+          <p class="page-sub">Expected vs actual reimbursement, payment matching, underpayment detection, and human-approved reconciliation.</p>
+        </div>
+        <div class="section-toolbar">
+          <button class="btn sm primary" onclick="paySimModal()">Record Payment</button>
+          <button class="btn sm" onclick="payList()">Refresh</button>
+        </div>
+        <div class="metric-strip">
+          <div class="metric"><div class="label">Total Collected</div><div class="value" id="pay-collected">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Unreconciled</div><div class="value" id="pay-unreconciled">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Awaiting Review</div><div class="value" id="pay-matches">0</div></div>
+        </div>
+        <table class="data">
+          <thead><tr><th>Payment</th><th>Method</th><th>Amount</th><th>Claim</th><th>Status</th><th>Reconciliation</th><th>Actions</th></tr></thead>
+          <tbody id="pay-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- L. Patient Finance -->
+      <section id="patient-finance" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Patient Financial Experience</h1>
+          <p class="page-sub">Patient balances, payment history, payment options, and financial communication.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="pat-filter" onchange="patList()"><option value="">All Balances</option><option value="COPAYMENT_PENDING">Copayment Pending</option><option value="OUTSTANDING">Outstanding</option><option value="PAID">Paid</option></select>
+          <button class="btn sm" onclick="patList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>MRN</th><th>Patient</th><th>Encounter</th><th>Expected</div><th>Paid</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="pat-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- M. Revenue Intelligence -->
+      <section id="revenue-integrity" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Revenue Intelligence</h1>
+          <p class="page-sub">Leakage detection, payer drift, revenue gaps, underpayment cases, and recovery tracking.</p>
+        </div>
+        <div class="section-toolbar">
+          <button class="btn sm primary" onclick="riDetect()">Run Leakage Detection</button>
+          <button class="btn sm" onclick="riList()">Refresh</button>
+        </div>
+        <div class="metric-strip">
+          <div class="metric"><div class="label">Potential Leakage</div><div class="value" id="ri-total">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Items Detected</div><div class="value" id="ri-count">0</div></div>
+          <div class="metric"><div class="label">Unresolved</div><div class="value" id="ri-unresolved">0</div></div>
+        </div>
+        <table class="data">
+          <thead><tr><th>Category</th><th>Reference</th><th>Amount</th><th>Evidence</th><th>Recommended Action</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="ri-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- Analytics -->
+      <section id="analytics" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Analytics &amp; Reports</h1>
+          <p class="page-sub">Operational analytics based on demonstration data. Export any table to CSV.</p>
+        </div>
+        <div class="section-toolbar">
+          <label style="font-size:10px;color:var(--muted);text-transform:uppercase">Date range</label>
+          <input type="date" id="an-start" onchange="anRefresh()">
+          <input type="date" id="an-end" onchange="anRefresh()">
+          <button class="btn sm" onclick="anRefresh()">Refresh</button>
+        </div>
+        <div class="metric-strip" id="an-kpis"></div>
+        <div class="grid-2" style="margin-top:12px">
+          <div class="card"><div class="card-title">Claims by Status</div><div id="an-claims-dist" class="empty">Loading&#8230;</div></div>
+          <div class="card"><div class="card-title">A/R Aging</div><div id="an-aging" class="empty">Loading&#8230;</div></div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">Export Reports</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn sm" onclick="anExport('claims')">Claims CSV</button>
+            <button class="btn sm" onclick="anExport('bills')">Bills CSV</button>
+            <button class="btn sm" onclick="anExport('payments')">Payments CSV</button>
+            <button class="btn sm" onclick="anExport('reconciliations')">Reconciliations CSV</button>
+            <button class="btn sm" onclick="anExport('denials')">Denials CSV</button>
+            <button class="btn sm" onclick="anExport('audit')">Audit Trail CSV</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI Agents -->
+      <section id="ai-orchestrator" class="section">
+        <div class="page-header">
+          <h1 class="page-title">AI Orchestrator</h1>
+          <p class="page-sub">Bidirectional agent-human task assignment with full task lifecycle. Synthetic Ghanaian data: NHIS, private, self-pay; inpatient/outpatient; GHS currency.</p>
+        </div>
+        <div class="section-toolbar">
+          <button class="btn sm primary" onclick="aiOrchestratorRefresh()">Refresh Agent States</button>
+          <button class="btn sm" onclick="orchSeedGhanaian()">Seed Ghanaian Demo Data</button>
+          <span class="tag">Interactive agent workspaces</span>
+        </div>
+        <div id="ai-orchestrator-metrics" style="margin-top:8px"></div>
+
+        <!-- Agent Workspaces -->
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">Agent Workspaces</div>
+          <div id="ai-orchestrator-grid" class="grid-3"></div>
+        </div>
+
+        <!-- Task Lifecycle -->
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">Task Lifecycle &amp; Bidirectional Assignment</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+            <div>
+              <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:4px">Create Task</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="ot-task-type" placeholder="Task type (e.g. claim_review)" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                <input id="ot-entity-type" placeholder="Entity type (claim/encounter/patient)" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                <input id="ot-entity-id" placeholder="Entity ID" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                <input id="ot-agent-name" placeholder="Agent name" value="Claims Validation Agent" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                <select id="ot-direction" style="font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                  <option value="agent_to_human">Agent &rarr; Human</option>
+                  <option value="human_to_agent">Human &rarr; Agent</option>
+                </select>
+                <select id="ot-priority" style="font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                  <option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option>
+                </select>
+              </div>
+              <div style="margin-top:6px">
+                <textarea id="ot-context" placeholder="Context / reason" rows="2" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)"></textarea>
+              </div>
+              <button class="btn sm primary" onclick="otCreateTask()" style="margin-top:6px">Create Task</button>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:4px">Task Actions</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="ot-action-task-id" placeholder="Task ID" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                <input id="ot-action-actor" placeholder="Actor" value="User" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                <input id="ot-delegate-from" placeholder="From Agent" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                <input id="ot-delegate-to" placeholder="To Agent" style="flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                <button class="btn sm" onclick="otStartTask()">Start</button>
+                <button class="btn sm primary" onclick="otCompleteTask()">Complete</button>
+                <button class="btn sm" onclick="otDelegateTask()">Delegate</button>
+                <button class="btn sm danger" onclick="otEscalateTask()">Escalate</button>
+              </div>
+              <div style="margin-top:6px">
+                <input id="ot-escalate-reason" placeholder="Escalation reason" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)">
+                <input id="ot-escalate-to" placeholder="Escalate to (user/agent)" style="width:100%;font-size:11px;padding:4px 6px;margin-top:4px;border:1px solid var(--line);border-radius:var(--radius)">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Activity Feed -->
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">Agent Activity Feed</div>
+          <div id="ai-orchestrator-log" class="empty">Loading&#8230;</div>
+        </div>
+      </section>
+
+      <!-- Human Review -->
+      <section id="review" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Human Review &amp; Approval Center</h1>
+          <p class="page-sub">Unified inbox for documentation reviews, reconciliation approvals, denial reviews, and exceptions.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="rv-filter" onchange="rvList()"><option value="">All Review Items</option><option value="documentation">Documentation Reviews</option><option value="reconciliation">Reconciliation Reviews</option><option value="coding">Coding Reviews</option><option value="exceptions">Exceptions</option></select>
+          <button class="btn sm" onclick="rvList()">Refresh</button>
+        </div>
+        <table class="data">
+          <thead><tr><th>Type</th><th>Reference</th><th>Context</th><th>AI Recommendation</th><th>Financial Impact</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="rv-table-body"></tbody>
+        </table>
+      </section>
+
+      <section id="claimit" class="section">
+        <div class="page-header">
+          <h1 class="page-title">CLAIM-it Integration Workspace</h1>
+          <p class="page-sub">Demonstration only — not a live CLAIM-it connector. File-based claims exchange, validation/correction, feedback, and AI-agent coordination with human-in-the-loop review.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="ci-mode" onchange="ciModeChanged()">
+            <option value="file_based">File-Based Exchange</option>
+            <option value="hms_to_pnrcm">HMS-to-PNRCM</option>
+            <option value="manual">Manual Entry</option>
+          </select>
+          <button class="btn sm primary" onclick="ciLoadConfig()">Refresh Config</button>
+          <button class="btn sm" onclick="ciLoadQueue()">Load Queue</button>
+          <button class="btn sm" onclick="ciLoadDashboard()">Dashboard</button>
+        </div>
+
+        <div class="ci-grid">
+          <div class="ci-card ci-modes">
+            <div class="card-title">Integration Mode</div>
+            <div class="mode-list" id="ci-mode-list"></div>
+            <div class="mode-actions">
+              <button class="btn sm primary" onclick="ciSync()">Sync Status</button>
+              <button class="btn sm" onclick="ciPrepareFile()">Prepare File</button>
+            </div>
+          </div>
+
+          <div class="ci-card ci-queue">
+            <div class="card-title">Claims Exchange Queue</div>
+            <table class="data compact">
+              <thead><tr><th>Claim Ref</th><th>Payer</th><th>Amount</th><th>PNRCM</th><th>CLAIM-it</th><th>Last Action</th><th>Next Action</th><th>Actions</th></tr></thead>
+              <tbody id="ci-queue-body"></tbody>
+            </table>
+          </div>
+
+          <div class="ci-card ci-issues">
+            <div class="card-title">Validation / Correction Issues</div>
+            <table class="data compact">
+              <thead><tr><th>Ref</th><th>Type</th><th>Severity</th><th>Description</th><th>Recommended Action</th><th>Responsible</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody id="ci-issues-body"></tbody>
+            </table>
+          </div>
+
+          <div class="ci-card ci-files">
+            <div class="card-title">File Exchange</div>
+            <table class="data compact">
+              <thead><tr><th>File Name</th><th>Type</th><th>Claims</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+              <tbody id="ci-files-body"></tbody>
+            </table>
+            <div style="margin-top:8px">
+              <label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">New File Name</label>
+              <input type="text" id="ci-file-name" placeholder="outbound_claims.json" style="width:100%;padding:6px;border:1px solid var(--line);border-radius:var(--radius)">
+              <label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;margin-top:8px">Claim Count</label>
+              <input type="number" id="ci-file-count" value="0" step="1" style="width:100%;padding:6px;border:1px solid var(--line);border-radius:var(--radius)">
+              <button class="btn sm primary" onclick="ciCreateFile()">Create File</button>
+            </div>
+          </div>
+
+          <div class="ci-card ci-feedback">
+            <div class="card-title">Feedback Workflow</div>
+            <table class="data compact">
+              <thead><tr><th>Ref</th><th>Claim Ref</th><th>Type</th><th>Outcome</th><th>Details</th><th>Processed</th><th>Action</th></tr></thead>
+              <tbody id="ci-feedback-body"></tbody>
+            </table>
+          </div>
+
+          <div class="ci-card ci-log">
+            <div class="card-title">Activity Log (Recent)</div>
+            <table class="data compact">
+              <thead><tr><th>Timestamp</th><th>Claim Ref</th><th>Actor</th><th>Action</th><th>Previous</th><th>New</th><th>Evidence</th></tr></thead>
+              <tbody id="ci-log-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ci-alert" id="ci-alert" style="display:none"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Encounter Detail Modal -->
+<div class="modal" id="modal-enc">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="enc-modal-title">Encounter Detail</div><button class="modal-close" onclick="hideModal('modal-enc')">&times;</button></div>
+    <div class="modal-body" id="enc-modal-body"></div>
+    <div class="modal-footer"><button class="btn" onclick="hideModal('modal-enc')">Close</button></div>
+  </div>
+</div>
+
+<!-- Documentation Review Modal -->
+<div class="modal" id="modal-doc">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="doc-modal-title">Documentation Review</div><button class="modal-close" onclick="hideModal('modal-doc')">&times;</button></div>
+    <div class="modal-body" id="doc-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-doc')">Close</button>
+      <button class="btn primary" id="doc-modal-approve" style="display:none">Approve</button>
+      <button class="btn danger" id="doc-modal-reject" style="display:none">Reject</button>
+      <button class="btn" id="doc-modal-corrections" style="display:none">Request Corrections</button>
+    </div>
+  </div>
+</div>
+
+<!-- Coding Review Modal -->
+<div class="modal" id="modal-code">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title">Coding Review</div><button class="modal-close" onclick="hideModal('modal-code')">&times;</button></div>
+    <div class="modal-body" id="modal-code-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-code')">Close</button>
+      <button class="btn primary" id="code-approve" onclick="codeResolve('approve')">Approve</button>
+      <button class="btn danger" id="code-reject" onclick="codeResolve('reject')">Reject</button>
+      <button class="btn" id="code-correct" onclick="codeResolve('correct')">Correct</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Simulation Modal -->
+<div class="modal" id="modal-pay">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title">Record Payment</div><button class="modal-close" onclick="hideModal('modal-pay')">&times;</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Claim ID</label><input type="text" id="pay-claim" placeholder="Claim number or ID"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Amount (GHS)</label><input type="number" id="pay-amt" step="0.01"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Method</label><select id="pay-method"><option>Cash</option><option>Mobile Money</option><option>Card</option><option>Bank Transfer</option></select></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Reference</label><input type="text" id="pay-ref" placeholder="Optional reference"></div>
+      </div>
+      <div id="pay-result" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-pay')">Cancel</button>
+      <button class="btn primary" onclick="paySubmit()">Record Payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Agent Detail Modal -->
+<div class="modal" id="modal-agent-detail">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="agent-detail-title">Agent Detail</div><button class="modal-close" onclick="hideModal('modal-agent-detail')">&times;</button></div>
+    <div class="modal-body" id="agent-detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-agent-detail')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Demo Mode Panel -->
+<div class="demo-panel" id="demoPanel">
+  <div class="demo-panel-header">
+    <div class="demo-panel-title">Guided Demo Mode</div>
+  </div>
+  <div class="demo-panel-body" id="demo-panel-body"></div>
+  <div class="demo-controls">
+    <button class="btn sm primary" onclick="demoStart()">Start Demo</button>
+    <button class="btn sm" onclick="demoNext()">Next Step</button>
+    <button class="btn sm" onclick="demoReset()">Reset</button>
+    <button class="btn sm danger" onclick="toggleDemoPanel()">Close</button>
+  </div>
+</div>
+
+<script>
+const API = '';
+let curUser = 'Demo User';
+let curFacility = '';
+let curRole = '';
+let selectedEncounter = null;
+let selectedClaim = null;
+let demoState = { active: false, scenarioId: null, currentStep: 0, steps: [] };
+
+async function api(path, opts = {}){
+  const headers = opts.headers || {};
+  let body = null;
+  if(opts.body){ headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.body); }
+  const res = await fetch(API + path, {method: opts.method || 'GET', headers, body});
+  const txt = await res.text();
+  let data = null; try{ data = txt ? JSON.parse(txt) : {}; }catch(e){ data = {_raw: txt}; }
+  if(!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data;
+}
+function $el(id){ return document.getElementById(id); }
+function showSection(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  $el(id).classList.add('active');
+  const btn=$el('nav-'+id);
+  if(btn) btn.classList.add('active');
+  if(id==='command') cmdRefresh();
+  if(id==='encounters') encList();
+  if(id==='registration') regList();
+  if(id==='authorization') authList();
+  if(id==='documentation') docList();
+  if(id==='coding') codeList();
+  if(id==='claims') clmList();
+  if(id==='claim-prep') clmprepList();
+  if(id==='claim-submit') clmsubList();
+  if(id==='denials') denList();
+  if(id==='ar') arList();
+  if(id==='payments') payList();
+  if(id==='patient-finance') patList();
+  if(id==='revenue-integrity') riList();
+  if(id==='analytics') anRefresh();
+  if(id==='ai-orchestrator') aiOrchestratorRefresh();
+  if(id==='review') rvList();
+}
+window.showSection=showSection;
+
+function fmtMoney(n){
+  if(n==null) return '&#8212;';
+  return 'GHS ' + Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+function statusBadge(s){
+  const k=(s||'').toString().toLowerCase();
+  let cls='open';
+  if(k.includes('approv')||k.includes('paid')||k.includes('completed')||k.includes('resolved')||k.includes('closed')||k.includes('accepted')) cls='approved';
+  else if(k.includes('deni')||k.includes('reject')) cls='rejected';
+  else if(k.includes('pend')||k.includes('open')||k.includes('submitted')||k.includes('vetted')) cls='pending';
+  else if(k.includes('draft')) cls='draft';
+  else if(k.includes('needs')||k.includes('correction')) cls='needs-review';
+  return `<span class="status ${cls}">${esc(s)}</span>`;
+}
+function hideModal(id){ $el(id).classList.remove('open'); }
+
+async function seedData(){
+  try{ await api('/api/demo/seed-all',{method:'POST'}); alert('Demo data seeded'); loadFacilities(); loadRoles(); }
+  catch(e){ alert('Seed failed: '+e.message); }
+}
+async function resetData(){
+  if(!confirm('Reset all demo data? This cannot be undone.')) return;
+  try{ await api('/api/reset',{method:'POST'}); location.reload(); }
+  catch(e){ alert('Reset failed: '+e.message); }
+}
+
+async function loadFacilities(){
+  try{
+    const facs = await api('/api/facilities');
+    const sel = $el('facility-picker');
+    sel.innerHTML = '<option value="">All Facilities</option>';
+    (facs||[]).forEach(f=>sel.innerHTML += `<option value="${esc(f.code)}">${esc(f.name)}</option>`);
+    const csel = $el('cmd-facility');
+    csel.innerHTML = '<option value="">All Facilities</option>';
+    (facs||[]).forEach(f=>csel.innerHTML += `<option value="${esc(f.code)}">${esc(f.name)}</option>`);
+  }catch(e){}
+}
+async function loadRoles(){
+  try{
+    const users = await api('/api/users');
+    const sel = $el('role-picker');
+    sel.innerHTML = '<option value="">All Roles</option>';
+    (users||[]).forEach(u=>sel.innerHTML += `<option value="${esc(u.role)}">${esc(u.username)} (${esc(u.role)})</option>`);
+  }catch(e){}
+}
+function facilityChanged(){ curFacility=$el('facility-picker').value; if(document.querySelector('.section.active')){ const id=document.querySelector('.section.active').id; showSection(id); } }
+function roleChanged(){ curRole=$el('role-picker').value; }
+
+// Init
+async function init(){
+  async function safe(fn){ try{ await fn(); }catch(e){ console.warn('Init step failed:', fn.name, e.message); } }
+  await safe(loadFacilities);
+  await safe(loadRoles);
+  await safe(encList);
+  await safe(docList);
+  await safe(clmList);
+  await safe(riList);
+  await safe(payList);
+  await safe(anRefresh);
+  await safe(aiRefresh);
+  await safe(rvList);
+  await safe(cmdRefresh);
+  await safe(regList);
+  await safe(authList);
+  await safe(codeList);
+  await safe(clmprepList);
+  await safe(clmsubList);
+  await safe(denList);
+  await safe(arList);
+  await safe(patList);
+}
+async function codeResolve(decision){
+  // handled in codeOpen onclick
+}
+
+/* ================================================================
+   G. CLAIMS MANAGEMENT
+   ================================================================ */
+async function clmList(){
+  try{
+    const clms = await api('/api/claims');
+    const f = $el('clm-filter') ? $el('clm-filter').value : '';
+    let rows = (clms||[]).filter(c=>!f || c.status===f);
+    let tb='';
+    rows.forEach(c=>{
+      tb+=`<tr onclick="clmOpen('${esc(c.id)}','${esc(c.claim_number||c.id)}')">
+        <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
+        <td><span class="mono">${esc(c.encounter_id||'&#8212;')}</span></td>
+        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td>${fmtMoney(c.total_charges)}</td>
+        <td>${fmtMoney(c.approved_amount)}</td>
+        <td>${statusBadge(c.status)}</td>
+        <td class="small">${esc(c.denial_reason||'&#8212;')}</td>
+        <td>
+          <button class="btn sm" onclick="clmVet('${esc(c.id)}')">Vet</button>
+          ${c.status==='draft'?`<button class="btn sm primary" onclick="clmSubmit('${esc(c.id)}')">Submit</button>`:''}
+          ${c.status==='denied'?`<button class="btn sm" onclick="clmAppeal('${esc(c.id)}')">Appeal</button>`:''}
+        </td>
+      </tr>`;
+    });
+    $el('clm-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No claims found.</td></tr>';
+  }catch(e){ alert('Error loading claims: '+e.message); }
+}
+async function clmOpen(id, number){
+  try{
+    const claim = await api('/api/claims/'+encodeURIComponent(id));
+    const rec = await api('/api/reconciliations/'+encodeURIComponent(id)).catch(()=>null);
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Claim</td><td>${esc(claim.claim_number||claim.id)}</td></tr><tr><td>Encounter</td><td>${esc(claim.encounter_id||'&#8212;')}</td></tr><tr><td>Payer</td><td>${esc(claim.payer_name||claim.payer_type||'&#8212;')}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(claim.total_charges)}</td></tr><tr><td>Approved Amount</td><td>${fmtMoney(claim.approved_amount)}</td></tr><tr><td>Expected Reimbursement</td><td>${fmtMoney(claim.expected_reimbursement)}</td></tr><tr><td>Paid Amount</td><td>${fmtMoney(claim.paid_amount)}</td></tr><tr><td>Status</td><td>${statusBadge(claim.status)}</td></tr><tr><td>Denial Reason</td><td>${esc(claim.denial_reason||'&#8212;')}</td></tr></table>`;
+    if(rec){
+      html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Reconciliation</div>`;
+      html+=`<div style="padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:#fafbfc">
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span>Expected</span><span>${fmtMoney(rec.expected_reimbursement)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span>Received</span><span>${fmtMoney(rec.total_payments_received)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span>Reconciled</span><span>${fmtMoney(rec.reconciled_payments)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span>Outstanding</span><span>${fmtMoney(rec.outstanding_balance)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span>Variance</span><span>${fmtMoney(rec.variance)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px"><span>Review</span><span>${esc(rec.review_decision||'pending')}</span></div>
+      </div>`;
+    }
+    $el('enc-modal-title').textContent='Claim: '+esc(number);
+    $el('enc-modal-body').innerHTML=html;
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Error loading claim: '+e.message); }
+}
+async function clmVet(id){
+  try{
+    const r = await api('/api/claims/'+encodeURIComponent(id)+'/vet',{method:'POST'});
+    alert(`Claim vetted: ${r.vetting_status}\\nIssues: ${r.issue_count}`);
+    clmList();
+  }catch(e){ alert('Vet failed: '+e.message); }
+}
+async function clmSubmit(id){
+  if(!confirm('Submit this claim through the simulated payer workflow?')) return;
+  try{
+    const r = await api('/api/claims/'+encodeURIComponent(id)+'/submit',{method:'POST'});
+    alert(`Claim submitted: ${r.status}`);
+    clmList();
+  }catch(e){ alert('Submit failed: '+e.message); }
+}
+async function clmAppeal(id){
+  try{
+    const r = await api('/api/appeals/detect',{method:'POST',body:{claim_id:id}});
+    alert(`Appeal draft created: ${r.count} appeal(s)`);
+  }catch(e){ alert('Appeal failed: '+e.message); }
+}
+
+/* ================================================================
+   H. CLAIM PREPARATION & SCRUBBING
+   ================================================================ */
+async function clmprepList(){
+  try{
+    const clms = await api('/api/claims');
+    const f = $el('clmprep-filter') ? $el('clmprep-filter').value : '';
+    let rows = (clms||[]).filter(c=>!f || c.status===f);
+    let tb='';
+    rows.forEach(c=>{
+      const issues = [];
+      if(!c.diagnosis_codes) issues.push('Missing diagnosis codes');
+      if(!c.procedure_codes) issues.push('Missing procedure codes');
+      if(!c.expected_reimbursement || c.expected_reimbursement<=0) issues.push('No expected reimbursement');
+      if(c.denial_reason) issues.push('Previous denial: '+c.denial_reason);
+      const readiness = issues.length===0?'Ready':(issues.length<=2?'Needs Review':'Not Ready');
+      tb+=`<tr onclick="clmPrepOpen('${esc(c.id)}')">
+        <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
+        <td><span class="mono">${esc(c.encounter_id||'&#8212;')}</span></td>
+        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td>${fmtMoney(c.total_charges)}</td>
+        <td>${statusBadge(c.status)}</td>
+        <td>${issues.length}</td>
+        <td><span class="tag ${readiness==='Ready'?'approved':(readiness==='Needs Review'?'pending':'rejected')}">${readiness}</span></td>
+        <td><button class="btn sm" onclick="clmScrub('${esc(c.id)}')">Scrub</button></td>
+      </tr>`;
+    });
+    $el('clmprep-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No claims found.</td></tr>';
+  }catch(e){ alert('Error loading claim preparation: '+e.message); }
+}
+async function clmPrepOpen(id){
+  clmOpen(id, '');
+}
+async function clmScrub(id){
+  try{
+    const r = await api('/api/claims/'+encodeURIComponent(id)+'/standards',{method:'POST'});
+    alert(`Scrubbing complete.\\nStatus: ${r.vetting_status||'unknown'}\\nIssues found: ${r.issue_count||0}`);
+    clmprepList();
+  }catch(e){ alert('Scrub failed: '+e.message); }
+}
+
+/* ================================================================
+   I. CLAIM SUBMISSION & PAYER RESPONSE
+   ================================================================ */
+async function clmsubList(){
+  try{
+    const clms = await api('/api/claims');
+    const f = $el('clmsub-filter') ? $el('clmsub-filter').value : '';
+    let rows = (clms||[]).filter(c=>!f || c.status===f);
+    let tb='';
+    rows.forEach(c=>{
+      tb+=`<tr onclick="clmOpen('${esc(c.id)}','${esc(c.claim_number||c.id)}')">
+        <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
+        <td><span class="mono">${esc(c.encounter_id||'&#8212;')}</span></td>
+        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td>${fmtMoney(c.total_charges)}</td>
+        <td>${statusBadge(c.status)}</td>
+        <td>${esc(c.submitted_at||'&#8212;')}</td>
+        <td>${esc(c.status==='paid'?'Payment received':c.status==='denied'?'Rejected':'Pending')}</td>
+        <td>
+          ${c.status==='submitted'?`<button class="btn sm" onclick="simPayerResponse('${esc(c.id)}')">Simulate Response</button>`:''}
+          ${c.status==='denied'?`<button class="btn sm" onclick="clmAppeal('${esc(c.id)}')">Appeal</button>`:''}
+        </td>
+      </tr>`;
+    });
+    $el('clmsub-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No claims found.</td></tr>';
+  }catch(e){ alert('Error loading claim submission: '+e.message); }
+}
+async function simPayerResponse(id){
+  const types = ['payment_approved','payment_partially_approved','additional_documentation_requested','payment_issued','payment_delayed'];
+  let html='<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Simulated Payer Response (demo only)</div>';
+  types.forEach(t=>{
+    html+=`<button class="btn sm" style="width:100%;margin-bottom:4px;text-align:left" onclick="doPayerResponse('${esc(id)}','${esc(t)}')">${t.replace(/_/g,' ')}</button>`;
+  });
+  $el('pay-result').innerHTML = html;
+  window._pendingSimClaim = id;
+}
+async function doPayerResponse(claimId, type){
+  const amount = prompt('Payment amount (GHS, optional):');
+  try{
+    const r = await api('/api/payer-response/simulated',{method:'POST',body:{claim_id:claimId,response_type:type,amount:parseFloat(amount||0)}});
+    alert(`Simulated: ${r.response_type}\\nNew status: ${r.new_status}\\n\\n${r.notice}`);
+    clmsubList();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+
+/* ================================================================
+   J. DENIAL MANAGEMENT
+   ================================================================ */
+async function denList(){
+  try{
+    const dens = await api('/api/denials');
+    const f = $el('den-filter') ? $el('den-filter').value : '';
+    let rows = (dens||[]).filter(d=>!f || d.status===f);
+    let tb='';
+    rows.forEach(d=>{
+      tb+=`<tr>
+        <td><span class="mono">${esc(d.claim_id||'&#8212;')}</span></td>
+        <td>${esc(d.payer_name||'&#8212;')}</td>
+        <td>${fmtMoney(d.amount||0)}</td>
+        <td><span class="tag">${esc(d.denial_category||d.denial_reason||'&#8212;')}</span></td>
+        <td class="small">${esc(d.denial_reason||'&#8212;')}</td>
+        <td>${esc(d.deadline||'&#8212;')}</td>
+        <td>${statusBadge(d.status)}</td>
+        <td>
+          <button class="btn sm" onclick="denResolve('${esc(d.id)}')">Resolve</button>
+          ${d.status==='open'?`<button class="btn sm" onclick="clmAppeal('${esc(d.claim_id)}')">Appeal</button>`:''}
+        </td>
+      </tr>`;
+    });
+    $el('den-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No denials found.</td></tr>';
+  }catch(e){ alert('Error loading denials: '+e.message); }
+}
+async function denResolve(id){
+  const decision = prompt('Decision (approve/reject/escalate):')||'';
+  if(!decision) return;
+  try{
+    await api('/api/denials/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision,corrective_action:'',resubmit:false}});
+    denList();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+
+/* ================================================================
+   K. AR & FOLLOW-UP
+   ================================================================ */
+async function arList(){
+  try{
+    const claims = await api('/api/claims');
+    const f = $el('ar-filter') ? $el('ar-filter').value : '';
+    const today = new Date();
+    let rows = (claims||[]).filter(c=>c.approved_amount>0 && (c.status==='submitted'||c.status==='vetted'||c.status==='denied'||c.status==='paid'));
+    if(f){
+      rows = rows.filter(c=>{
+        const age = Math.max(0, Math.floor((today - new Date(c.created_at||0))/(1000*60*60*24)));
+        if(f==='0-30') return age<=30;
+        if(f==='31-60') return age>30 && age<=60;
+        if(f==='61-90') return age>60 && age<=90;
+        if(f==='90+') return age>90;
+        return true;
+      });
+    }
+    // AR metrics
+    const out = rows.reduce((s,c)=>s+parseFloat(c.approved_amount||0),0);
+    const paid = rows.reduce((s,c)=>s+parseFloat(c.paid_amount||0),0);
+    $el('ar-metrics').innerHTML = `
+      <div class="metric"><div class="label">Total Outstanding</div><div class="value">${fmtMoney(out)}</div></div>
+      <div class="metric"><div class="label">Total Paid</div><div class="value">${fmtMoney(paid)}</div></div>
+      <div class="metric"><div class="label">Accounts</div><div class="value">${rows.length}</div></div>
+    `;
+    let tb='';
+    rows.forEach(c=>{
+      const age = Math.max(0, Math.floor((today - new Date(c.created_at||0))/(1000*60*60*24)));
+      const priority = age>60?'high':(age>30?'medium':'low');
+      tb+=`<tr>
+        <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
+        <td>${esc(c.patient_id||'&#8212;')}</td>
+        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td>${fmtMoney(parseFloat(c.approved_amount||0)-parseFloat(c.paid_amount||0))}</td>
+        <td>${age} days</td>
+        <td><span class="tag ${priority==='high'?'rejected':(priority==='medium'?'warning':'approved')}">${priority}</span></td>
+        <td>Payer follow-up</td>
+        <td>Unassigned</td>
+        <td><button class="btn sm" onclick="arAction('${esc(c.id)}')">Action</button></td>
+      </tr>`;
+    });
+    $el('ar-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No A/R accounts.</td></tr>';
+  }catch(e){ alert('Error loading A/R: '+e.message); }
+}
+async function arAction(id){
+  const action = prompt('Action (follow_up/escalate/resolve):')||'';
+  if(!action) return;
+  alert(`AR action '${action}' recorded for claim ${id}.`);
+}
+
+/* ================================================================
+   L. PAYMENTS & RECONCILIATION
+   ================================================================ */
+async function payList(){
+  try{
+    const pays = await api('/api/collections/payments');
+    let tb='';
+    let collected=0, unreconciled=0;
+    (pays||[]).forEach(p=>{
+      collected += parseFloat(p.amount||0);
+      if(p.reconciliation_status!=='reconciled') unreconciled += parseFloat(p.amount||0);
+      tb+=`<tr>
+        <td><span class="mono">${esc(p.id)}</span></td>
+        <td>${esc(p.payment_method)}</td>
+        <td>${fmtMoney(p.amount)}</td>
+        <td><span class="mono">${esc(p.claim_id||'&#8212;')}</span></td>
+        <td>${statusBadge(p.payment_status)}</td>
+        <td>${statusBadge(p.reconciliation_status)}</td>
+        <td><button class="btn sm" onclick="payMatch('${esc(p.id)}')">Match</button></td>
+      </tr>`;
+    });
+    $el('pay-table-body').innerHTML = tb || '<tr><td colspan=7 class="empty">No payments found.</td></tr>';
+    $el('pay-collected').textContent = fmtMoney(collected);
+    $el('pay-unreconciled').textContent = fmtMoney(unreconciled);
+    const recs = await api('/api/reconciliations');
+    const matches = (recs||[]).filter(r=>r.review_decision==='pending').length;
+    $el('pay-matches').textContent = matches;
+  }catch(e){ alert('Error loading payments: '+e.message); }
+}
+function paySimModal(){
+  $el('pay-claim').value=''; $el('pay-amt').value=''; $el('pay-method').value='Cash'; $el('pay-ref').value=''; $el('pay-result').innerHTML='';
+  $el('modal-pay').classList.add('open');
+}
+async function paySubmit(){
+  const claim=$el('pay-claim').value.trim(); const amt=parseFloat($el('pay-amt').value);
+  const method=$el('pay-method').value; const ref=$el('pay-ref').value.trim();
+  if(!claim || !amt){ alert('Claim ID and amount required'); return; }
+  try{
+    const r = await api('/api/payment/simulated',{method:'POST',body:{claim_id:claim,amount:amt,payment_method:method,reference:ref,payment_status:'completed'}});
+    $el('pay-result').innerHTML = `<div class="status approved">Payment recorded: ${fmtMoney(r.amount||amt)}</div>`;
+    setTimeout(()=>{ hideModal('modal-pay'); payList(); }, 800);
+  }catch(e){ $el('pay-result').innerHTML = `<div class="status rejected">Failed: ${e.message}</div>`; }
+}
+async function payMatch(pid){
+  try{
+    const claims = await api('/api/claims');
+    let html=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:6px">Match Payment ${esc(pid)} to Claim</div><select id="match-claim" style="width:100%;padding:5px 7px;margin-bottom:8px"><option value="">Select claim</option>`;
+    (claims||[]).forEach(c=>html+=`<option value="${esc(c.id)}">${esc(c.claim_number||c.id)} - ${esc(c.payer_name||c.payer_type)}</option>`);
+    html+=`</select><div style="margin-top:8px"><button class="btn sm primary" onclick="doPayMatch('${esc(pid)}')">Create Match</button></div>`;
+    $el('pay-result').innerHTML = html;
+    window._pendingMatchPid = pid;
+  }catch(e){ alert('Error: '+e.message); }
+}
+async function doPayMatch(pid){
+  const sel = document.getElementById('match-claim');
+  if(!sel || !sel.value){ alert('Select a claim'); return; }
+  const amt = prompt('Matched amount (GHS):');
+  try{
+    await api('/api/payments/match',{method:'POST',body:{claim_id:sel.value,payment_id:pid,matched_amount:parseFloat(amt||0),matched_by:'User'}});
+    payList();
+  }catch(e){ alert('Match failed: '+e.message); }
+}
+
+/* ================================================================
+   M. PATIENT FINANCE
+   ================================================================ */
+async function patList(){
+  try{
+    const balances = await api('/api/collections/balances');
+    const f = $el('pat-filter') ? $el('pat-filter').value : '';
+    let rows = (balances||[]).filter(b=>!f || b.status===f);
+    const patients = await api('/api/patients');
+    const encs = await api('/api/encounters');
+    const pMap = {}; (patients||[]).forEach(p=>pMap[p.id]=p);
+    const eMap = {}; (encs||[]).forEach(e=>eMap[e.id]=e);
+    let tb='';
+    rows.forEach(b=>{
+      const p = pMap[b.patient_id]; const e = eMap[b.encounter_id];
+      tb+=`<tr>
+        <td>${p?esc(p.patient_id):'&#8212;'}</td>
+        <td>${p?esc(p.first_name+' '+p.last_name):'&#8212;'}</td>
+        <td>${e?esc(e.encounter_id):'&#8212;'}</td>
+        <td>${fmtMoney(b.expected_copayment)}</td>
+        <td>${fmtMoney(b.amount_paid)}</td>
+        <td>${fmtMoney(b.outstanding)}</td>
+        <td>${statusBadge(b.status)}</td>
+        <td><button class="btn sm">Pay</button></td>
+      </tr>`;
+    });
+    $el('pat-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No patient balances.</td></tr>';
+  }catch(e){ alert('Error loading patient balances: '+e.message); }
+}
+
+/* ================================================================
+   N. REVENUE INTEGRITY
+   ================================================================ */
+async function riList(){
+  try{
+    const lk = await api('/api/leakage');
+    const items = lk.items||[];
+    $el('ri-total').textContent = fmtMoney(lk.total_potential_leakage||0);
+    $el('ri-count').textContent = items.length;
+    $el('ri-unresolved').textContent = items.filter(i=>i.status!=='resolved').length;
+    let tb='';
+    items.forEach(it=>{
+      tb+=`<tr>
+        <td><span class="tag">${esc(it.category_label||it.category)}</span></td>
+        <td><span class="mono">${esc(it.entity_type||'')} ${esc(it.claim_number||it.encounter_id||it.entity_id||'')}</span></td>
+        <td>${fmtMoney(it.amount)}</td>
+        <td class="small">${esc(it.evidence||'')}</td>
+        <td class="small">${esc(it.recommended_action||'')}</td>
+        <td>${statusBadge(it.status||'open')}</td>
+        <td><button class="btn sm" onclick="riResolve('${esc(it.id)}','${esc(it.category)}')">Resolve</button></td>
+      </tr>`;
+    });
+    $el('ri-table-body').innerHTML = tb || '<tr><td colspan=7 class="empty">No leakage items detected.</td></tr>';
+  }catch(e){ alert('Error loading leakage: '+e.message); }
+}
+async function riDetect(){
+  try{ await api('/api/leakage'); riList(); }
+  catch(e){ alert('Detection failed: '+e.message); }
+}
+async function riResolve(id, cat){
+  alert(`Resolution workflow for ${cat} item ${id}: assign to responsible department, review evidence, and mark resolved in the Human Review Center.`);
+}
+
+/* ================================================================
+   O. ANALYTICS
+   ================================================================ */
+async function anRefresh(){
+  try{
+    const ov = await api('/api/analytics/overview');
+    const kpis = ov.kpis||{};
+    let html='';
+    Object.entries(kpis).forEach(([k,v])=>{
+      html+=`<div class="metric"><div class="label">${esc(v.label||k)}</div><div class="value">${fmtMoney(v.value)}${v.unit||''}</div><div class="small">${esc(v.definition||'')}</div></div>`;
+    });
+    $el('an-kpis').innerHTML=html;
+    const ca = await api('/api/analytics/claims');
+    let ch='';
+    Object.entries(ca.status_distribution||{}).forEach(([s,n])=>{
+      ch+=`<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(s)}</span> <span style="float:right">${n}</span></div>`;
+    });
+    $el('an-claims-dist').innerHTML = ch || '<div class="empty">No claims.</div>';
+    const ag = await api('/api/analytics/ar-aging');
+    let ah='';
+    Object.entries(ag.buckets||{}).forEach(([k,v])=>{
+      ah+=`<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(k)} days</span> <span style="float:right">${fmtMoney(v.amount)} (${v.count})</span></div>`;
+    });
+    $el('an-aging').innerHTML = ah || '<div class="empty">No aging data.</div>';
+  }catch(e){ alert('Analytics error: '+e.message); }
+}
+async function anExport(type){
+  try{
+    let endpoint, filename;
+    if(type==='claims'){ endpoint='/api/claims'; filename='claims.csv'; }
+    else if(type==='bills'){ endpoint='/api/bills'; filename='bills.csv'; }
+    else if(type==='payments'){ endpoint='/api/collections/payments'; filename='payments.csv'; }
+    else if(type==='reconciliations'){ endpoint='/api/reconciliations'; filename='reconciliations.csv'; }
+    else if(type==='denials'){ endpoint='/api/denials'; filename='denials.csv'; }
+    else if(type==='audit'){ endpoint='/api/audit/export.csv'; filename='audit_trail.csv'; window.location.href = API+endpoint; return; }
+    const data = await api(endpoint);
+    if(!Array.isArray(data)) throw new Error('Not a list');
+    const rows = data;
+    if(rows.length===0){ alert('No data to export'); return; }
+    const keys = Object.keys(rows[0]);
+    let csv = keys.join(',')+'\n';
+    rows.forEach(r=>{ csv += keys.map(k=>{ const v=r[k]; const s = String(v==null?'':v); return s.includes(',')||s.includes('"')||s.includes('\n') ? '"'+s.replace(/"/g,'""')+'"' : s; }).join(',')+'\n'; });
+    const blob = new Blob([csv],{type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  }catch(e){ alert('Export failed: '+e.message); }
+}
+
+/* ================================================================
+   P. AI ORCHESTRATOR
+   ================================================================ */
+async function aiOrchestratorRefresh(){
+  try{
+    const st = await api('/api/orchestrator/state');
+    const states = (st&&st.agents)||[];
+    let html='';
+    (states||[]).forEach(a=>{
+      const pending = a._pending||0;
+      html+=`<div class="agent-card" onclick="showAgentDetail('${esc(a.name)}')" style="cursor:pointer"><div class="agent-head"><div><div class="agent-name">${esc(a.name)}</div><div class="agent-role">${esc(a.role||'')}</div></div><div class="agent-status ${(a.status||'idle').toLowerCase()}">${esc(a.status||'Idle')}</div></div><div class="agent-meta">Tasks: ${a.tasks_completed||0} &nbsp; Exceptions: ${a.exceptions||0} &nbsp; Pending: ${pending} &nbsp; ${a.current_task?'Current: '+esc(a.current_task):''}</div></div>`;
+    });
+    $el('ai-orchestrator-grid').innerHTML = html || '<div class="empty">No agents.</div>';
+
+    // Load tasks per agent workspace
+    for (const a of (states||[])) {
+      try {
+        const tasks = await api('/api/orchestrator/tasks?agent=' + encodeURIComponent(a.name));
+        const pending = (tasks||[]).filter(t=>['created','assigned','started'].includes(t.status)).length;
+        const el = document.createElement('div');
+        el.className = 'agent-task-list';
+        el.style.cssText = 'margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);font-size:11px';
+        el.innerHTML = `<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">${esc(a.name)} Workspace</div>
+          ${(tasks||[]).slice(0,5).map(t=>`<div style="padding:3px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(t.status||'').toLowerCase()}">${esc(t.status||'created')}</span> ${esc(t.task_type||'')} &bull; ${esc(t.entity_type||'')}/${esc((t.entity_id||'').substring(0,8))} <span style="float:right;font-size:9px">${esc(t.direction||'')}</span></div>`).join('')}
+          <div style="font-size:9px;color:var(--muted);margin-top:4px">${pending} pending &bull; ${(tasks||[]).length} total</div>`;
+        $el('ai-orchestrator-grid').appendChild(el);
+      }catch(e){ /* skip per-agent task load errors */ }
+    }
+
+    const log = await api('/api/audit');
+    let lh='';
+    (log||[]).slice(0,15).forEach(r=>{
+      lh+=`<div style="padding:5px 0;border-bottom:1px solid #e3e9ee"><div class="mono small">${esc(r.timestamp||'')}</div><div style="font-size:11px">${esc(r.actor||'')} - ${esc(r.action||'')}</div><div class="small">${esc(r.entity_type||'')}/${esc(r.entity_id||'')}</div></div>`;
+    });
+    $el('ai-orchestrator-log').innerHTML = lh || '<div class="empty">No activity log.</div>';
+
+    // Load orchestrator metrics
+    try {
+      const m = await api('/api/orchestrator/metrics');
+      const mm = $el('ai-orchestrator-metrics');
+      if (mm) {
+        mm.innerHTML = `<div style="font-size:10px;color:var(--muted);margin-bottom:4px">Orchestrator Metrics</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:80px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Total Tasks</div><div style="font-size:13px;font-weight:700">${m.total_tasks||0}</div></div>
+            <div style="flex:1;min-width:80px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Pending</div><div style="font-size:13px;font-weight:700;color:var(--warning)">${m.pending||0}</div></div>
+            <div style="flex:1;min-width:80px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Completed</div><div style="font-size:13px;font-weight:700;color:var(--success)">${m.completed||0}</div></div>
+            <div style="flex:1;min-width:80px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Escalated</div><div style="font-size:13px;font-weight:700;color:var(--danger)">${m.escalated||0}</div></div>
+            <div style="flex:1;min-width:80px;background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Blocked</div><div style="font-size:13px;font-weight:700">${m.blocked||0}</div></div>
+          </div>`;
+      }
+    }catch(e){ /* skip metrics load errors */ }
+  }catch(e){ alert('AI Orchestrator error: '+e.message); }
+}
+
+async function otCreateTask(){
+  try{
+    const body = {
+      task_type: $el('ot-task-type').value,
+      entity_type: $el('ot-entity-type').value,
+      entity_id: $el('ot-entity-id').value,
+      agent_name: $el('ot-agent-name').value,
+      direction: $el('ot-direction').value,
+      priority: $el('ot-priority').value,
+      context: $el('ot-context').value
+    };
+    const r = await api('/api/orchestrator/tasks',{method:'POST',body:JSON.stringify(body),headers:{'Content-Type':'application/json'}});
+    alert('Task created: ' + r.task_id);
+    await aiOrchestratorRefresh();
+  }catch(e){ alert('Create task failed: '+e.message); }
+}
+
+async function otStartTask(){
+  try{
+    const tid = $el('ot-action-task-id').value;
+    const actor = $el('ot-action-actor').value;
+    await api('/api/orchestrator/tasks/'+encodeURIComponent(tid)+'/start',{method:'POST',body:JSON.stringify({actor}),headers:{'Content-Type':'application/json'}});
+    await aiOrchestratorRefresh();
+  }catch(e){ alert('Start task failed: '+e.message); }
+}
+
+async function otCompleteTask(){
+  try{
+    const tid = $el('ot-action-task-id').value;
+    const actor = $el('ot-action-actor').value;
+    await api('/api/orchestrator/tasks/'+encodeURIComponent(tid)+'/complete',{method:'POST',body:JSON.stringify({actor}),headers:{'Content-Type':'application/json'}});
+    await aiOrchestratorRefresh();
+  }catch(e){ alert('Complete task failed: '+e.message); }
+}
+
+async function otEscalateTask(){
+  try{
+    const tid = $el('ot-action-task-id').value;
+    const reason = $el('ot-escalate-reason').value;
+    const escalateTo = $el('ot-escalate-to').value;
+    await api('/api/orchestrator/tasks/'+encodeURIComponent(tid)+'/escalate',{method:'POST',body:JSON.stringify({reason,escalate_to:escalateTo}),headers:{'Content-Type':'application/json'}});
+    await aiOrchestratorRefresh();
+  }catch(e){ alert('Escalate task failed: '+e.message); }
+}
+
+async function showAgentDetail(agentName){
+  try{
+    const d = await api('/api/orchestrator/agents/'+encodeURIComponent(agentName)+'/detail');
+    const ag = d.agent||{};
+    const perf = d.performance||{};
+    let html=`
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700">${esc(ag.name)}</div>
+            <div style="font-size:10px;color:var(--muted)">${esc(ag.role||'')}</div>
+          </div>
+          <div class="agent-status ${(ag.status||'idle').toLowerCase()}" style="font-size:9px">${esc(ag.status||'Idle')}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+          <div style="background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Tasks Completed</div><div style="font-size:13px;font-weight:700">${ag.tasks_completed||0}</div></div>
+          <div style="background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Exceptions</div><div style="font-size:13px;font-weight:700">${ag.exceptions||0}</div></div>
+          <div style="background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Pending Tasks</div><div style="font-size:13px;font-weight:700">${d.pending||0}</div></div>
+          <div style="background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius)"><div style="font-size:9px;color:var(--muted)">Success Rate</div><div style="font-size:13px;font-weight:700">${perf.success_rate||0}%</div></div>
+        </div>
+        ${ag.current_task?`<div style="background:var(--info-bg);border:1px solid #b9d4e0;padding:6px;border-radius:var(--radius);margin-bottom:8px;font-size:11px"><div style="font-size:9px;color:var(--info);text-transform:uppercase">Current Task</div><div>${esc(ag.current_task)}</div></div>`:''}
+        ${ag.output?`<div style="background:var(--surface);border:1px solid var(--line);padding:6px;border-radius:var(--radius);margin-bottom:8px;font-size:11px"><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Last Output</div><div style="font-size:10px;white-space:pre-wrap">${esc(typeof ag.output==='string'?ag.output:JSON.stringify(ag.output,null,2))}</div></div>`:''}
+        ${ag.last_activity?`<div style="font-size:9px;color:var(--muted);margin-bottom:8px">Last activity: ${esc(ag.last_activity)}</div>`:''}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Tasks (${d.task_count||0})</div>
+          <div style="font-size:11px">
+            ${(d.tasks||[]).slice(0,10).map(t=>`<div style="padding:4px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(t.status||'').toLowerCase()}">${esc(t.status||'created')}</span> ${esc(t.task_type||'')} &bull; ${esc(t.entity_type||'')}/${esc((t.entity_id||'').substring(0,8))} <span style="float:right;font-size:9px;color:var(--muted)">${esc(t.direction||'')}</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${esc(t.context||'')}</div></div>`).join('') || '<div style="font-size:10px;color:var(--muted);padding:8px">No tasks.</div>'}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Performance</div>
+          <div style="font-size:11px">
+            <div style="padding:3px 0"><span>Total Executions:</span> <span style="float:right">${perf.total_executions||0}</span></div>
+            <div style="padding:3px 0"><span>Completed:</span> <span style="float:right;color:var(--success)">${perf.completed||0}</span></div>
+            <div style="padding:3px 0"><span>Failed:</span> <span style="float:right;color:var(--danger)">${perf.failed||0}</span></div>
+            <div style="padding:3px 0"><span>Human Review Required:</span> <span style="float:right">${perf.human_review_required||0}</span></div>
+            <div style="padding:3px 0"><span>Avg Duration:</span> <span style="float:right">${perf.avg_duration_ms?perf.avg_duration_ms+' ms':'-'}</span></div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:10px;margin-bottom:6px">Recent Executions</div>
+          <div style="font-size:11px">
+            ${(d.recent_executions||[]).slice(0,5).map(e=>`<div style="padding:3px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(e.status||'').toLowerCase()}">${esc(e.status||'pending')}</span> ${esc(e.task_name||'')} &bull; ${esc(e.entity_type||'')}/${esc((e.entity_id||'').substring(0,8))}<div style="font-size:9px;color:var(--muted);margin-top:2px">${esc(e.error_message||'')}</div></div>`).join('') || '<div style="font-size:10px;color:var(--muted);padding:8px">No executions.</div>'}
+          </div>
+        </div>
+      </div>
+    `;
+    $el('agent-detail-title').textContent = esc(agentName)+' &mdash; Detail';
+    $el('agent-detail-body').innerHTML = html;
+    $el('modal-agent-detail').classList.add('open');
+  }catch(e){ alert('Failed to load agent detail: '+e.message); }
+}
+
+async function otDelegateTask(){
+  try{
+    const tid = $el('ot-action-task-id').value;
+    const fromAgent = $el('ot-delegate-from').value;
+    const toAgent = $el('ot-delegate-to').value;
+    if(!fromAgent || !toAgent){ alert('Enter both from and to agent names'); return; }
+    await api('/api/orchestrator/tasks/'+encodeURIComponent(tid)+'/delegate',{method:'POST',body:JSON.stringify({from_agent:fromAgent,to_agent:toAgent,assigned_by:'User'}),headers:{'Content-Type':'application/json'}});
+    await aiOrchestratorRefresh();
+  }catch(e){ alert('Delegate task failed: '+e.message); }
+}
+
+async function orchSeedGhanaian(){
+  try{
+    const r = await api('/api/orchestrator/seed-ghanaian',{method:'POST'});
+    alert('Ghanaian demo data seeded: ' + JSON.stringify(r.seeded));
+    await aiOrchestratorRefresh();
+  }catch(e){ alert('Seed failed: '+e.message); }
+}
+
+/* ================================================================
+   Q. HUMAN REVIEW CENTER
+   ================================================================ */
+async function rvList(){
+  try{
+    const f = $el('rv-filter') ? $el('rv-filter').value : '';
+    let items=[];
+    if(!f || f==='documentation'){
+      const docs = await api('/api/documentation-reviews');
+      (docs||[]).forEach(r=>items.push({type:'Documentation Review',ref:r.encounter_id,context:r.findings?JSON.parse(r.findings).map(x=>x.finding).join('; '):'',rec:'Human review required',impact:0,status:r.status,id:r.id}));
+    }
+    if(!f || f==='reconciliation'){
+      const recs = await api('/api/reconciliations');
+      (recs||[]).forEach(r=>items.push({type:'Reconciliation Review',ref:r.claim_number||r.claim_id,context:`Expected ${fmtMoney(r.expected_reimbursement)} vs Received ${fmtMoney(r.total_payments_received)}`,rec:`Review decision: ${r.review_decision}`,impact:parseFloat(r.outstanding_balance||0),status:r.review_decision,id:r.id}));
+    }
+    if(!f || f==='coding'){
+      const codes = await api('/api/coding-suggestions');
+      (codes||[]).forEach(r=>items.push({type:'Coding Review',ref:r.code_value||'',context:esc(r.code_description||''),rec:`${Math.round((r.confidence||0)*100)}% confidence`,impact:0,status:r.status,id:r.id}));
+    }
+    if(!f || f==='exceptions'){
+      const ex = await api('/api/exceptions');
+      (ex||[]).forEach(r=>items.push({type:'Exception',ref:r.claim_id||r.encounter_id||r.bill_id||'&#8212;',context:r.title,rec:r.recommended_action,impact:0,status:r.status,id:r.id}));
+    }
+    let tb='';
+    items.forEach(it=>{
+      tb+=`<tr>
+        <td>${esc(it.type)}</td>
+        <td><span class="mono">${esc(it.ref)}</span></td>
+        <td class="small">${esc(it.context)}</td>
+        <td class="small">${esc(it.rec)}</td>
+        <td>${fmtMoney(it.impact)}</td>
+        <td>${statusBadge(it.status)}</td>
+        <td><button class="btn sm" onclick="rvAct('${esc(it.type)}','${esc(it.id)}','${esc(it.status)}')">Act</button></td>
+      </tr>`;
+    });
+    $el('rv-table-body').innerHTML = tb || '<tr><td colspan=7 class="empty">No review items pending.</td></tr>';
+  }catch(e){ alert('Review center error: '+e.message); }
+}
+async function rvAct(type, id, status){
+  if(status!=='pending' && status!=='open' && status!=='pending_review' && status!=='reviewed_approve' && status!=='reviewed_reject' && status!=='reviewed_correct'){
+    alert(`Already resolved: ${status}`); return;
+  }
+  const decision = prompt(`Action for ${type} (approve/reject/request_correction/escalate/resolve):`)||'';
+  if(!decision) return;
+  try{
+    if(type==='Documentation Review'){
+      await api('/api/documentation-reviews/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision,reviewer_notes:''}});
+    } else if(type==='Reconciliation Review'){
+      await api('/api/reconciliations/'+encodeURIComponent(id)+'/review',{method:'POST',body:{decision,reviewer:'User',notes:''}});
+    } else if(type==='Coding Review'){
+      await api('/api/coding-suggestions/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision,reviewer:'User'}});
+    } else if(type==='Exception'){
+      await api('/api/exceptions/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{status:decision,resolution_notes:''}});
+    }
+    rvList();
+  }catch(e){ alert('Action failed: '+e.message); }
+}
+
+/* ================================================================
+   R. DEMO MODE
+   ================================================================ */
+function toggleDemoPanel(){
+  const p = $el('demoPanel');
+  const banner = $el('demoBanner');
+  const isOpen = p.classList.contains('open');
+  if(isOpen){ p.classList.remove('open'); banner.style.display='none'; demoState.active=false; }
+  else { p.classList.add('open'); banner.style.display='block'; demoState.active=true; loadDemoScenarios(); }
+}
+async function loadDemoScenarios(){
+  try{
+    const scen = await api('/api/demo/scenarios');
+    const body = $el('demo-panel-body');
+    let html='';
+    (scen||[]).forEach(s=>{
+      const active = demoState.scenarioId===s.id;
+      html+=`<div class="demo-step ${active?'active':''}" onclick="demoSelect('${esc(s.id)}')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div class="step-name">${esc(s.name)}</div>
+            <div class="small">${esc(s.description)}</div>
+          </div>
+          <div class="small">${s.current_step}/${s.total_steps}</div>
+        </div>
+        <div style="margin-top:4px">${Array.from({length:s.total_steps},(_,i)=>`<span style="font-size:8px;padding:1px 5px;border:1px solid var(--line);border-radius:2px;background:${i<s.current_step?'#e7f2ea':'#fafbfc'};color:${i<s.current_step?'#1d6b3f':'#5a6b78'};margin-right:2px"></span>`).join('')}</div>
+      </div>`;
+    });
+    body.innerHTML = html || '<div class="empty">No demo scenarios.</div>';
+  }catch(e){ body.innerHTML = '<div class="empty">Error loading scenarios.</div>'; }
+}
+async function demoSelect(sid){
+  demoState.scenarioId = sid;
+  try{
+    const steps = await api('/api/demo/scenarios/'+encodeURIComponent(sid)+'/steps');
+    demoState.steps = steps||[];
+    demoState.currentStep = 0;
+    renderDemoStep();
+  }catch(e){ alert('Error loading scenario steps: '+e.message); }
+}
+function renderDemoStep(){
+  const body = $el('demo-panel-body');
+  const step = demoState.steps[demoState.currentStep];
+  if(!step){ body.innerHTML = '<div class="empty">Demo complete.</div>'; return; }
+  let html = `<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px">Step ${step.step_order} of ${demoState.steps.length}</div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px">${esc(step.step_name)}</div>
+    <div style="font-size:10.5px;color:var(--muted);margin-bottom:12px">${esc(step.step_description)}</div>
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Target Screen: ${esc(step.screen||'command')}</div>
+    <div style="padding:10px;border:1px solid var(--line);border-radius:var(--radius);background:#fafbfc;margin-bottom:12px">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:4px">Status: ${esc(step.status)}</div>
+    </div>`;
+  if(step.status==='completed'){
+    html+=`<button class="btn sm primary" onclick="demoNext()">Next Step</button>`;
+  } else {
+    html+=`<button class="btn sm primary" onclick="demoCompleteStep()">Mark Complete</button>`;
+  }
+  html+=`<button class="btn sm" onclick="demoGotoScreen('${esc(step.screen||'command')}')">Go to Screen</button>`;
+  body.innerHTML = html;
+}
+async function demoCompleteStep(){
+  if(!demoState.scenarioId) return;
+  try{
+    await api('/api/demo/scenarios/'+encodeURIComponent(demoState.scenarioId)+'/step/'+demoState.currentStep+'/complete',{method:'POST',body:{evidence:'Demo step completed'}});
+    demoState.currentStep++;
+    renderDemoStep();
+    loadDemoScenarios();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+async function demoNext(){
+  if(demoState.currentStep < demoState.steps.length-1){
+    demoState.currentStep++;
+    renderDemoStep();
+  } else {
+    alert('Demo scenario complete!');
+  }
+}
+function demoReset(){
+  demoState.currentStep = 0;
+  renderDemoStep();
+}
+async function demoStart(){
+  if(!demoState.scenarioId){
+    alert('Please select a demo scenario first.');
+    return;
+  }
+  demoState.currentStep = 0;
+  renderDemoStep();
+}
+function demoGotoScreen(screen){
+  toggleDemoPanel();
+  showSection(screen);
+}
+</script>
+</body>
+</html>
+
+
+/* ================================================================
+   A. COMMAND CENTER
+   ================================================================ */
+async function cmdRefresh(){
+  // Panel 1: KPI Metrics
+  try{
+    const ov = await api('/api/dashboard/overview');
+    const k = ov.kpis||{};
+    const rows=[
+      ['Total Charges', fmtMoney(k.total_charges)],
+      ['Total Collected', fmtMoney(k.total_collected)],
+      ['Outstanding', fmtMoney(k.total_outstanding)],
+      ['Claims Submitted', k.claims_submitted],
+      ['Claims Pending', k.claims_pending],
+      ['Claims Rejected', k.claims_rejected],
+      ['Claims Requiring Attention', k.claims_requiring_attention],
+      ['Unreconciled Payments', fmtMoney(k.unreconciled_payments)],
+      ['Open Exceptions', k.open_exceptions],
+      ['Pending Reviews', k.pending_reviews],
+    ];
+    $el('command-metrics').innerHTML=rows.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('command-metrics').innerHTML = `<div class="error">Error loading metrics: ${esc(e.message)}</div>`; }
+
+  // Panel 2: Recent Activity
+  try{
+    const act = await api('/api/dashboard/activity');
+    let ah='';
+    (act||[]).slice(0,12).forEach(r=>{
+      ah+=`<div style="padding:6px 0;border-bottom:1px solid #e3e9ee"><div class="mono small">${esc(r.timestamp||'')}</div><div style="font-size:11px">${esc(r.action||'')}</div><div class="small">${esc(r.actor||'')} &bull; ${esc(r.entity_type||'')} / ${esc(r.entity_id||'')}</div></div>`;
+    });
+    $el('command-activity').innerHTML = ah || '<div class="empty">No recent activity.</div>';
+  }catch(e){ $el('command-activity').innerHTML = `<div class="error">Error loading activity: ${esc(e.message)}</div>`; }
+
+  // Panel 3: Issues & Alerts
+  try{
+    const iss = await api('/api/dashboard/issues');
+    let ih='';
+    [...(iss.exceptions||[]), ...(iss.review_tasks||[])].slice(0,8).forEach(r=>{
+      const sev = r.severity||'low';
+      ih+=`<div class="alert-item ${sev}"><div class="alert-title">${esc(r.title||r.task_type||'Review item')}</div><div class="alert-meta">${esc(r.explanation||r.context||'')}</div><div class="alert-meta">${statusBadge(r.status||'pending')} &bull; ${esc(r.detecting_agent||r.assigned_to||'')}</div></div>`;
+    });
+    $el('command-alerts').innerHTML = ih || '<div class="empty">No priority issues.</div>';
+    $el('command-reviews').innerHTML = ih || '<div class="empty">No review tasks.</div>';
+  }catch(e){ $el('command-alerts').innerHTML = `<div class="error">Error loading issues: ${esc(e.message)}</div>`; $el('command-reviews').innerHTML = `<div class="error">Error loading reviews: ${esc(e.message)}</div>`; }
+
+  // Panel 4: Encounter Stage Distribution
+  try{
+    const encs = await api('/api/encounters');
+    const stages={};
+    (encs||[]).forEach(e=>{ stages[e.status] = (stages[e.status]||0)+1; });
+    let sh='';
+    Object.entries(stages).forEach(([s,n])=>{
+      sh+=`<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(s)}</span> <span style="float:right">${n}</span></div>`;
+    });
+    $el('command-stages').innerHTML = sh || '<div class="empty">No encounters.</div>';
+  }catch(e){ $el('command-stages').innerHTML = `<div class="error">Error loading stages: ${esc(e.message)}</div>`; }
+}
+
+/* ================================================================
+   B. ENCOUNTERS
+   ================================================================ */
+async function encList(){
+  try{
+    const encs = await api('/api/encounters');
+    const depts = await api('/api/departments');
+    const df=$el('enc-dept-filter'); df.innerHTML='<option value="">All Departments</option>';
+    (depts||[]).forEach(d=>df.innerHTML+=`<option value="${esc(d.name)}">${esc(d.name)}</option>`);
+    const sf=$el('enc-status-filter'); sf.innerHTML='<option value="">All Statuses</option>';
+    ['registered','consultation','diagnostics','treatment','billing','payment','claims','completed'].forEach(s=>sf.innerHTML+=`<option value="${s}">${s}</option>`);
+    const pf=$el('enc-payer-filter'); pf.innerHTML='<option value="">All Payers</option>';
+    const claims = await api('/api/claims');
+    const payers = [...new Set((claims||[]).map(c=>c.payer_name).filter(Boolean))];
+    payers.forEach(p=>pf.innerHTML+=`<option value="${esc(p)}">${esc(p)}</option>`);
+    const q=$el('enc-filter').value.toLowerCase(); const dept=$el('enc-dept-filter').value; const st=$el('enc-status-filter').value; const pay=$el('enc-payer-filter').value;
+    let rows = (encs||[]).filter(e=>{
+      const hay = ((e.patient_name||'')+' '+e.encounter_id+' '+(e.department||'')).toLowerCase();
+      if(q && !hay.includes(q)) return false;
+      if(dept && e.department!==dept) return false;
+      if(st && e.status!==st) return false;
+      return true;
+    });
+    // Enrich with claim/payer info
+    let tb='';
+    rows.forEach(e=>{
+      const claim = (claims||[]).find(c=>c.encounter_id===e.id);
+      const payer = claim ? (claim.payer_name||claim.payer_type||'&#8212;') : '&#8212;';
+      if(pay && claim && claim.payer_name!==pay) return;
+      tb+=`<tr onclick="encSelect('${esc(e.id)}','${esc(e.encounter_id)}')">
+        <td><span class="mono">${esc(e.encounter_id)}</span></td>
+        <td>${esc(e.patient_name)}</td>
+        <td><span class="tag">${esc(e.department||'&#8212;')}</span></td>
+        <td>${statusBadge(e.status)}</td>
+        <td>${payer}</td>
+        <td>${fmtMoney(parseFloat(e.total_charges||0))}</td>
+        <td>${fmtMoney(parseFloat(e.outstanding||0))}</td>
+        <td><span class="tag">${esc(e.status||'&#8212;')}</span></td>
+        <td><button class="btn sm">View</button></td>
+      </tr>`;
+    });
+    $el('enc-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No encounters found.</td></tr>';
+    $el('enc-detail-notice').textContent = '';
+  }catch(e){ alert('Error loading encounters: '+e.message); }
+}
+async function encSelect(id, encNo){
+  selectedEncounter = id;
+  try{
+    const wf = await api('/api/encounters/'+encodeURIComponent(id)+'/workflow');
+    const enc = wf.encounter||{};
+    const services = wf.services||[];
+    const transitions = wf.transitions||[];
+    const totalCharges = services.reduce((s,x)=>s+parseFloat(x.total_price||0),0);
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Encounter</td><td>${esc(enc.encounter_id)}</td></tr><tr><td>Patient</td><td>${esc(enc.patient_name)}</td></tr><tr><td>Department</td><td>${esc(enc.department||'&#8212;')}</td></tr><tr><td>Type</td><td>${esc(enc.encounter_type)}</td></tr><tr><td>Status</td><td>${statusBadge(enc.status)}</td></tr><tr><td>Documentation</td><td>${enc.documentation_complete?'Complete':'Incomplete'}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(totalCharges)}</td></tr></table>`;
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Lifecycle Steps</div><div style="display:flex;gap:4px;margin-bottom:10px">`;
+    const steps=['Registration','Eligibility','Clinical','Documentation','Charge Capture','Billing','Claims Submission','Payment','Reconciliation','Closure'];
+    steps.forEach((s,idx)=>{
+      const done = enc.status==='completed' || (wf.steps||[]).find(x=>x.step_name===s);
+      html+=`<span style="font-size:9px;padding:2px 6px;border:1px solid var(--line);background:${done?'#e7f2ea':'#fafbfc'};color:${done?'#1d6b3f':'#5a6b78'}">${esc(s)}</span>`;
+    });
+    html+=`</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Transitions</div><table class="data" style="margin-bottom:0">`;
+    (transitions||[]).forEach(t=>{
+      html+=`<tr><td>${esc(t.from_status||'&#8212;')}</td><td>&rarr;</td><td><b>${esc(t.to_status)}</b></td><td class="small">${esc(t.actor||'')} &bull; ${esc(t.note||'')}</td><td class="mono small">${esc(t.ts||'')}</td></tr>`;
+    });
+    html+=`</table>`;
+    $el('enc-modal-title').textContent='Encounter '+esc(encNo);
+    $el('enc-modal-body').innerHTML=html;
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Error loading encounter: '+e.message); }
+}
+
+/* ================================================================
+   C. REGISTRATION & ELIGIBILITY
+   ================================================================ */
+async function regList(){
+  try{
+    const patients = await api('/api/patients');
+    const f = $el('reg-filter').value;
+    let rows = patients||[];
+    if(f==='issues') rows = rows.filter(p=>(p.duplicate_flags||'').includes('[') && JSON.parse(p.duplicate_flags||'[]').length>0);
+    else if(f==='eligibility') rows = rows.filter(p=>p.insurance_type && p.insurance_type!=='self_pay');
+    else if(f==='clean') rows = rows.filter(p=>!(p.duplicate_flags||'').includes('['));
+    let tb='';
+    rows.forEach(p=>{
+      let dups=0; try{ dups = JSON.parse(p.duplicate_flags||'[]').length; }catch(e){}
+      let missing=0; try{ missing = JSON.parse(p.financial_profile||'{}').missing?.length||0; }catch(e){}
+      tb+=`<tr onclick="encSelectPatient('${esc(p.id)}','${esc(p.patient_id)}')">
+        <td><span class="mono">${esc(p.patient_id)}</span></td>
+        <td>${esc(p.first_name+' '+p.last_name)}</td>
+        <td><span class="tag">${esc(p.insurance_type||'self_pay')}</span></td>
+        <td>${missing} missing</td>
+        <td>${dups>0?`<span class="status needs-review">${dups} potential match(es)</span>`:'<span class="status approved">None</span>'}</td>
+        <td>${p.insurance_type?`<span class="status approved">Verified</span>`:'<span class="status open">Pending</span>'}</td>
+        <td><span class="status ${p.insurance_type?'approved':'open'}">${p.insurance_type?'Cleared':'Pending'}</span></td>
+        <td><button class="btn sm">View</button></td>
+      </tr>`;
+    });
+    $el('reg-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No patients found.</td></tr>';
+  }catch(e){ alert('Error loading registration: '+e.message); }
+}
+async function encSelectPatient(id, mrn){
+  try{
+    const p = await api('/api/patients/'+encodeURIComponent(id));
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">MRN</td><td>${esc(p.patient.patient_id)}</td></tr><tr><td>Name</td><td>${esc(p.patient.first_name+' '+p.patient.last_name)}</td></tr><tr><td>Insurance Type</td><td>${esc(p.patient.insurance_type||'self_pay')}</td></tr><tr><td>Insurance Number</td><td>${esc(p.patient.insurance_number||'&#8212;')}</td></tr><tr><td>Status</td><td>${statusBadge(p.patient.status)}</td></tr></table>`;
+    let dups=[]; try{ dups = JSON.parse(p.patient.duplicate_flags||'[]'); }catch(e){}
+    if(dups.length>0){
+      html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Duplicate Risk</div>`;
+      dups.forEach(d=>{
+        html+=`<div class="alert-item medium"><div class="alert-title">Potential duplicate: ${esc(d.patient_id)}</div><div class="alert-meta">Match score: ${esc(d.score)} &bull; Reasons: ${esc(d.reasons.join(', '))}</div></div>`;
+      });
+    }
+    let missing=[]; try{ missing = JSON.parse(p.patient.financial_profile||'{}').missing||[]; }catch(e){}
+    if(missing.length>0){
+      html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Missing Registration Fields</div>`;
+      missing.forEach(m=>html+=`<div class="alert-item low"><div class="alert-title">${esc(m)}</div><div class="alert-meta">Required field not provided during registration.</div></div>`);
+    }
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Registration Timeline</div><div class="timeline">`;
+    (p.timeline||[]).forEach(t=>{
+      html+=`<div class="timeline-item ${t.status==='done'?'completed':'open'}"><div class="time">${esc(t.ts||'')}</div><div class="action">${esc(t.action)}</div><div class="detail">${esc(t.detail||'')} &bull; ${esc(t.agent_name||'')}</div></div>`;
+    });
+    html+=`</div>`;
+    $el('enc-modal-title').textContent='Patient Registration: '+esc(mrn);
+    $el('enc-modal-body').innerHTML=html;
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Error loading patient: '+e.message); }
+}
+
+/* ================================================================
+   D. PRIOR AUTHORIZATION
+   ================================================================ */
+async function authList(){
+  try{
+    const auths = await api('/api/authorizations');
+    const f = $el('auth-filter').value;
+    let rows = (auths||[]).filter(a=>!f || a.status===f);
+    // Enrich with patient/encounter names
+    const patients = await api('/api/patients');
+    const encs = await api('/api/encounters');
+    const pMap = {}; (patients||[]).forEach(p=>pMap[p.id]=p);
+    const eMap = {}; (encs||[]).forEach(e=>eMap[e.id]=e);
+    let tb='';
+    rows.forEach(a=>{
+      const p = pMap[a.patient_id]; const e = eMap[a.encounter_id];
+      tb+=`<tr>
+        <td><span class="mono">${esc(a.auth_number)}</span></td>
+        <td>${p?esc(p.first_name+' '+p.last_name):'&#8212;'}</td>
+        <td>${e?esc(e.encounter_id):'&#8212;'}</td>
+        <td><span class="tag">${esc(a.payer_name||a.payer_type||'&#8212;')}</span></td>
+        <td>${esc(a.procedure_code||'&#8212;')}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td>${esc(a.requested_at||'')}</td>
+        <td>${esc(a.expiry_date||'&#8212;')}</td>
+        <td>
+          <button class="btn sm" onclick="authDecision('${esc(a.id)}','approve')">Approve</button>
+          ${a.status==='pending'?`<button class="btn sm danger" onclick="authDecision('${esc(a.id)}','reject')">Reject</button>`:''}
+          ${a.status==='pending'?`<button class="btn sm" onclick="authDecision('${esc(a.id)}','request_documents')">Request Docs</button>`:''}
+        </td>
+      </tr>`;
+    });
+    $el('auth-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No authorizations found.</td></tr>';
+  }catch(e){ alert('Error loading authorizations: '+e.message); }
+}
+async function authDecision(aid, decision){
+  const reviewer = prompt('Reviewer name:')||'User';
+  let extra = {};
+  if(decision==='reject'){ extra.rejection_reason = prompt('Rejection reason (required):')||''; if(!extra.rejection_reason) return; }
+  if(decision==='request_documents'){ extra.rejection_reason = prompt('Documents required:'); }
+  try{
+    await api('/api/authorizations/'+encodeURIComponent(aid)+'/decision',{method:'POST',body:{decision,reviewer,...extra}});
+    authList();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+
+/* ================================================================
+   E. DOCUMENTATION & CHARGES
+   ================================================================ */
+async function docList(){
+  try{
+    const revs = await api('/api/documentation-reviews');
+    const encs = await api('/api/encounters');
+    const eMap = {}; (encs||[]).forEach(e=>eMap[e.id]=e);
+    const f = $el('doc-filter').value;
+    let rows = (revs||[]).filter(r=>!f || r.status===f);
+    let tb='';
+    rows.forEach(r=>{
+      const e = eMap[r.encounter_id];
+      const findings = JSON.parse(r.findings||'[]');
+      tb+=`<tr onclick="docOpen('${esc(r.id)}')">
+        <td><span class="mono">${esc(e?e.encounter_id:'&#8212;')}</span></td>
+        <td>${e?esc(e.patient_name||'&#8212;'):'&#8212;'}</td>
+        <td><span class="tag">${esc(e?e.department||'&#8212;':'&#8212;')}</span></td>
+        <td>${findings.length} finding(s)</td>
+        <td>${esc(findings.length?findings[0].finding||findings[0].code:'None')}</td>
+        <td>${r.human_review_required?'<span class="status pending">Required</span>':'<span class="status approved">Not required</span>'}</td>
+        <td>${statusBadge(r.status)}</td>
+        <td><button class="btn sm">Review</button></td>
+      </tr>`;
+    });
+    $el('doc-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No documentation reviews.</td></tr>';
+  }catch(e){ alert('Error loading documentation: '+e.message); }
+}
+async function docOpen(id){
+  try{
+    const r = await api('/api/documentation-reviews/'+encodeURIComponent(id));
+    const findings = JSON.parse(r.findings||'[]');
+    let html=`<div style="margin-bottom:8px"><b>Encounter:</b> ${esc(r.encounter_id)}&nbsp;&nbsp;<b>Status:</b> ${statusBadge(r.status)}</div>`;
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:8px 0 4px 0">AI Findings</div>`;
+    if(findings.length===0) html+=`<div class="empty">No findings - documentation appears complete.</div>`;
+    findings.forEach(fnd=>{
+      html+=`<div style="padding:7px;border:1px solid var(--line);margin-bottom:7px;border-radius:var(--radius)">
+        <div style="font-weight:600;font-size:11px">${esc(fnd.finding||fnd.code)}</div>
+        <div class="small">${esc(fnd.explanation||'')}</div>
+        <div class="small" style="margin-top:3px"><b>Recommended:</b> ${esc(fnd.recommended_correction||'')}</div>
+        <div class="small"><b>Field:</b> ${esc(fnd.field||'&#8212;')} &nbsp; <b>Severity:</b> ${esc(fnd.severity||'&#8212;')}</div>
+      </div>`;
+    });
+    html+=`<div class="notice">The AI must never silently alter clinical documentation. Every proposed correction requires authorized human review.</div>`;
+    $el('doc-modal-title').textContent='Documentation Review';
+    $el('doc-modal-body').innerHTML=html;
+    const approve=$el('doc-modal-approve'), reject=$el('doc-modal-reject'), corr=$el('doc-modal-corrections');
+    approve.style.display = r.status==='pending'?'inline-flex':'none';
+    reject.style.display = r.status==='pending'?'inline-flex':'none';
+    corr.style.display = r.status==='pending'?'inline-flex':'none';
+    approve.onclick = async()=>{
+      const notes = prompt('Reviewer notes (optional):')||'';
+      try{ await api('/api/documentation-reviews/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision:'approve',reviewer_notes:notes}}); hideModal('modal-doc'); docList(); }
+      catch(e){ alert('Failed: '+e.message); }
+    };
+    reject.onclick = async()=>{
+      const notes = prompt('Reviewer notes (required):')||'';
+      if(!notes){ alert('Notes required'); return; }
+      try{ await api('/api/documentation-reviews/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision:'reject',reviewer_notes:notes}}); hideModal('modal-doc'); docList(); }
+      catch(e){ alert('Failed: '+e.message); }
+    };
+    corr.onclick = async()=>{
+      const notes = prompt('Corrections requested (required):')||'';
+      if(!notes){ alert('Notes required'); return; }
+      try{ await api('/api/documentation-reviews/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision:'corrections_requested',reviewer_notes:notes}}); hideModal('modal-doc'); docList(); }
+      catch(e){ alert('Failed: '+e.message); }
+    };
+    $el('modal-doc').classList.add('open');
+  }catch(e){ alert('Error loading review: '+e.message); }
+}
+function docModalClose(){ hideModal('modal-doc'); }
+
+/* ================================================================
+   F. AI CODING REVIEW
+   ================================================================ */
+async function codeList(){
+  try{
+    const encs = await api('/api/encounters');
+    const eMap = {}; (encs||[]).forEach(e=>eMap[e.id]=e);
+    const codes = await api('/api/coding-suggestions');
+    const f = $el('code-filter').value;
+    let rows = (codes||[]).filter(c=>!f || c.status===f);
+    let tb='';
+    rows.forEach(c=>{
+      const e = eMap[c.encounter_id];
+      tb+=`<tr onclick="codeOpen('${esc(c.id)}')">
+        <td><span class="mono">${esc(e?e.encounter_id:'&#8212;')}</span></td>
+        <td><span class="tag">${esc(c.code_type||'&#8212;')}</span></td>
+        <td><span class="mono">${esc(c.code_value||'&#8212;')}</span></td>
+        <td>${esc(c.code_description||'&#8212;')}</td>
+        <td>${Math.round((c.confidence||0)*100)}%</td>
+        <td class="small">${esc(c.evidence||'&#8212;')}</td>
+        <td>${statusBadge(c.status)}</td>
+        <td><button class="btn sm">Review</button></td>
+      </tr>`;
+    });
+    $el('code-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No coding suggestions.</td></tr>';
+  }catch(e){ alert('Error loading coding suggestions: '+e.message); }
+}
+async function codeOpen(id){
+  try{
+    const c = await api('/api/coding-suggestions'); // list, find by id
+    const sug = (c||[]).find(x=>x.id===id);
+    if(!sug){ alert('Suggestion not found'); return; }
+    let html=`<div style="margin-bottom:8px"><b>Code Type:</b> ${esc(sug.code_type)}&nbsp;&nbsp;<b>Code:</b> ${esc(sug.code_value)}&nbsp;&nbsp;<b>Confidence:</b> ${Math.round((sug.confidence||0)*100)}%</div>`;
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:8px 0 4px 0">Description</div><div>${esc(sug.code_description||'&#8212;')}</div>`;
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Evidence</div><div class="small">${esc(sug.evidence||'&#8212;')}</div>`;
+    html+=`<div class="notice">Ghanaian coding context: These are demonstration codes. Actual NHIS tariff codes should be validated against current NHIS guidelines.</div>`;
+    $el('modal-code-body').innerHTML=html;
+    const approve=$el('code-approve'), reject=$el('code-reject'), corr=$el('code-correct');
+    const pending = sug.status==='pending_review';
+    approve.style.display = pending?'inline-flex':'none';
+    reject.style.display = pending?'inline-flex':'none';
+    corr.style.display = pending?'inline-flex':'none';
+    approve.onclick = async()=>{ try{ await api('/api/coding-suggestions/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision:'approve',reviewer:'User'}}); hideModal('modal-code'); codeList(); }catch(e){ alert('Failed: '+e.message); } };
+    reject.onclick = async()=>{ try{ await api('/api/coding-suggestions/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision:'reject',reviewer:'User'}}); hideModal('modal-code'); codeList(); }catch(e){ alert('Failed: '+e.message); } };
+    corr.onclick = async()=>{ const notes = prompt('Corrected code/description:'); if(!notes) return; try{ await api('/api/coding-suggestions/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:{decision:'correct',reviewer:'User',notes}}); hideModal('modal-code'); codeList(); }catch(e){ alert('Failed: '+e.message); } };
+    $el('modal-code').classList.add('open');
+  }catch(e){ alert('Error loading coding suggestion: '+e.message); }
+}
+async function codeResolve(decision){
+  // handled in codeOpen onclick
+}
+
+/* ================================================================
+   CLAIM-IT INTEGRATION WORKSPACE
+   ================================================================ */
+async function ciModeChanged(){
+  const mode = $el('ci-mode').value;
+  ciLoadConfig();
+  ciLoadQueue();
+  ciLoadDashboard();
+}
+
+async function ciLoadConfig(){
+  try{
+    const rows = await api('/api/claimit/config');
+    let html='';
+    (rows||[]).forEach(r=>{
+      const active = r.integration_mode===($el('ci-mode')?$el('ci-mode').value:'file_based');
+      html+=`<div class="mode-item${active?' active':''}" style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px;background:${active?'var(--accent-light)':'#fff'}">
+        <div>
+          <div style="font-weight:700;font-size:11px">${esc(r.facility_id||'facility')}</div>
+          <div style="font-size:10px;color:var(--muted)">Mode: ${esc(r.integration_mode||'file_based')} &bull; Status: ${esc(r.status||'demo')}</div>
+        </div>
+        <div style="font-size:10px;color:var(--muted)">Pending transfers: ${r.pending_transfers||0} &bull; Feedback: ${r.pending_feedback||0}</div>
+      </div>`;
+    });
+    $el('ci-mode-list').innerHTML = html || '<div class="empty">No integration configs.</div>';
+  }catch(e){ alert('Error loading CLAIM-it config: '+e.message); }
+}
+
+async function ciLoadQueue(){
+  try{
+    const rows = await api('/api/claimit/queue');
+    let html='';
+    (rows||[]).forEach(r=>{
+      html+=`<tr>
+        <td><span class="mono small">${esc(r.claim_ref||'&#8212;')}</span></td>
+        <td class="small">${esc(r.payer_name||'&#8212;')}</td>
+        <td class="small">${fmtMoney(r.claim_amount||0)}</td>
+        <td><span class="tag">${esc(r.pnrcm_status||'&#8212;')}</span></td>
+        <td><span class="tag">${esc(r.claimit_status||'&#8212;')}</span></td>
+        <td class="small">${esc(r.last_action||'&#8212;')}</td>
+        <td class="small">${esc(r.next_action||'&#8212;')}</td>
+        <td>
+          <button class="btn sm" onclick="ciAction('${esc(r.id)}','export_prepare')">Prepare</button>
+          <button class="btn sm" onclick="ciAction('${esc(r.id)}','transfer')">Transfer</button>
+          <button class="btn sm" onclick="ciAction('${esc(r.id)}','validate',{result:'passed'})">Validate</button>
+          <button class="btn sm" onclick="ciAction('${esc(r.id)}','correct')">Correct</button>
+          <button class="btn sm" onclick="ciAction('${esc(r.id)}','reconcile')">Reconcile</button>
+        </td>
+      </tr>`;
+    });
+    $el('ci-queue-body').innerHTML = html || '<tr><td colspan=8 class="empty">No queue items.</td></tr>';
+  }catch(e){ alert('Error loading queue: '+e.message); }
+}
+
+async function ciAction(qid, action_type, extra={}){
+  try{
+    const note = prompt('Action note (optional):')||'';
+    await api('/api/claimit/queue/'+encodeURIComponent(qid)+'/action',{method:'POST',body:{action_type,note,...extra}});
+    ciLoadQueue();
+    ciLoadDashboard();
+    ciLoadLog();
+  }catch(e){ alert('Action failed: '+e.message); }
+}
+
+async function ciLoadIssues(){
+  try{
+    const rows = await api('/api/claimit/issues');
+    let html='';
+    (rows||[]).forEach(r=>{
+      html+=`<tr>
+        <td class="small">${esc(r.claim_ref||'&#8212;')}</td>
+        <td class="small">${esc(r.issue_type||'&#8212;')}</td>
+        <td><span class="tag tag-${r.severity||'low'}">${esc(r.severity||'&#8212;')}</span></td>
+        <td class="small">${esc(r.description||'&#8212;')}</td>
+        <td class="small">${esc(r.recommended_action||'&#8212;')}</td>
+        <td class="small">${esc(r.responsible_role||'&#8212;')}</td>
+        <td><span class="tag">${esc(r.status||'open')}</span></td>
+        <td><button class="btn sm" onclick="ciResolveIssue('${esc(r.id)}')">Resolve</button></td>
+      </tr>`;
+    });
+    $el('ci-issues-body').innerHTML = html || '<tr><td colspan=8 class="empty">No issues.</td></tr>';
+  }catch(e){ alert('Error loading issues: '+e.message); }
+}
+
+async function ciResolveIssue(iid){
+  try{
+    await api('/api/claimit/issues/'+encodeURIComponent(iid)+'/resolve',{method:'POST',body:{actor:'User'}});
+    ciLoadIssues();
+  }catch(e){ alert('Resolve failed: '+e.message); }
+}
+
+async function ciLoadFiles(){
+  try{
+    const rows = await api('/api/claimit/files');
+    let html='';
+    (rows||[]).forEach(r=>{
+      html+=`<tr>
+        <td class="small mono">${esc(r.file_name||'&#8212;')}</td>
+        <td class="small">${esc(r.file_type||'&#8212;')}</td>
+        <td class="small">${r.claim_count||0}</td>
+        <td><span class="tag">${esc(r.status||'&#8212;')}</span></td>
+        <td class="small">${esc((r.created_at||'').slice(0,16))}</td>
+        <td>
+          ${r.status==='prepared'?`<button class="btn sm" onclick="ciTransferFile('${esc(r.id)}')">Transfer</button>`:''}
+          ${r.status==='transferred'?`<button class="btn sm" onclick="ciImportFile('${esc(r.id)}')">Import</button>`:''}
+        </td>
+      </tr>`;
+    });
+    $el('ci-files-body').innerHTML = html || '<tr><td colspan=6 class="empty">No files.</td></tr>';
+  }catch(e){ alert('Error loading files: '+e.message); }
+}
+
+async function ciCreateFile(){
+  const name = $el('ci-file-name').value.trim();
+  const count = parseInt($el('ci-file-count').value||'0');
+  if(!name){ alert('File name required'); return; }
+  try{
+    await api('/api/claimit/files',{method:'POST',body:{file_name:name,claim_count:count,actor:'User'}});
+    $el('ci-file-name').value=''; $el('ci-file-count').value='0';
+    ciLoadFiles();
+    ciLoadDashboard();
+  }catch(e){ alert('Create file failed: '+e.message); }
+}
+
+async function ciTransferFile(fid){
+  try{
+    await api('/api/claimit/files/'+encodeURIComponent(fid)+'/transfer',{method:'POST',body:{actor:'User'}});
+    ciLoadFiles();
+  }catch(e){ alert('Transfer failed: '+e.message); }
+}
+
+async function ciImportFile(fid){
+  alert('File import simulated — feedback items generated.');
+  ciLoadFiles();
+  ciLoadFeedback();
+}
+
+async function ciLoadFeedback(){
+  try{
+    const rows = await api('/api/claimit/feedback');
+    let html='';
+    (rows||[]).forEach(r=>{
+      html+=`<tr>
+        <td class="small mono">${esc(r.feedback_ref||'&#8212;')}</td>
+        <td class="small">${esc(r.claim_ref||'&#8212;')}</td>
+        <td class="small">${esc(r.feedback_type||'&#8212;')}</td>
+        <td class="small">${esc(r.outcome||'&#8212;')}</td>
+        <td class="small">${esc(r.details||'&#8212;')}</td>
+        <td class="small">${r.processed?'Yes':'No'}</td>
+        <td>${!r.processed?`<button class="btn sm" onclick="ciProcessFeedback('${esc(r.id)}')">Process</button>`:'&#8212;'}</td>
+      </tr>`;
+    });
+    $el('ci-feedback-body').innerHTML = html || '<tr><td colspan=7 class="empty">No feedback.</td></tr>';
+  }catch(e){ alert('Error loading feedback: '+e.message); }
+}
+
+async function ciProcessFeedback(fid){
+  try{
+    await api('/api/claimit/feedback/'+encodeURIComponent(fid)+'/process',{method:'POST',body:{actor:'User'}});
+    ciLoadFeedback();
+    ciLoadDashboard();
+  }catch(e){ alert('Process failed: '+e.message); }
+}
+
+async function ciLoadLog(){
+  try{
+    const rows = await api('/api/claimit/log');
+    let html='';
+    (rows||[]).forEach(r=>{
+      html+=`<tr>
+        <td class="small mono">${esc((r.timestamp||'').slice(0,16))}</td>
+        <td class="small mono">${esc(r.claim_ref||'&#8212;')}</td>
+        <td class="small">${esc(r.actor||'&#8212;')}</td>
+        <td class="small">${esc(r.action||'&#8212;')}</td>
+        <td class="small">${esc(r.previous_status||'&#8212;')}</td>
+        <td class="small">${esc(r.new_status||'&#8212;')}</td>
+        <td class="small">${esc(r.evidence||'&#8212;')}</td>
+      </tr>`;
+    });
+    $el('ci-log-body').innerHTML = html || '<tr><td colspan=7 class="empty">No activity.</td></tr>';
+  }catch(e){ alert('Error loading log: '+e.message); }
+}
+
+async function ciSync(){
+  try{
+    await api('/api/claimit/sync',{method:'POST',body:{actor:'User'}});
+    ciLoadConfig();
+    ciLoadDashboard();
+    showAlert('CLAIM-it sync completed','success');
+  }catch(e){ alert('Sync failed: '+e.message); }
+}
+
+async function ciLoadDashboard(){
+  try{
+    const d = await api('/api/claimit/dashboard');
+    let html=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:8px">
+      <div class="metric"><div class="label">Total Claims</div><div class="value">${d.total_claims||0}</div></div>
+      <div class="metric"><div class="label">Open Issues</div><div class="value" style="color:var(--danger)">${d.open_issues||0}</div></div>
+      <div class="metric"><div class="label">Unprocessed Feedback</div><div class="value" style="color:var(--warning)">${d.unprocessed_feedback||0}</div></div>
+    </div>`;
+    if(d.by_status&&d.by_status.length){
+      html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">By CLAIM-it Status</div>`;
+      d.by_status.forEach(s=>{ html+=`<div style="padding:4px 0"><span class="tag">${esc(s.claimit_status||'&#8212;')}</span> <span class="small float-right">${s.n||0}</span></div>`; });
+    }
+    $el('ci-mode-list').innerHTML = html + ($el('ci-mode-list').innerHTML||'');
+  }catch(e){ alert('Error loading dashboard: '+e.message); }
+}
+
+function showAlert(msg,type){
+  const a=$el('ci-alert');
+  a.style.display='block';
+  a.className='ci-alert '+type;
+  a.textContent=msg;
+  setTimeout(()=>{a.style.display='none';},4000);
+}
+
+async function ciPrepareFile(){
+  ciCreateFile();
+}
+
+// Initialize all modules on page load
+init();
+
+</script>
+</body>
+</html>
