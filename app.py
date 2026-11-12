@@ -1,5 +1,5 @@
 import json, uuid, csv, io, datetime, time, os
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, g
 import db
 from db import get_db, now, agent_execution_start, agent_execution_complete, audit, add_exception, add_transition, add_timeline
 from agents.claims_vetting import vet_claim, run_standards_rules
@@ -18,6 +18,8 @@ from agents import orchestrator as orch
 from agents import evidence as evidence_mod
 from agents import reconciliation as reconciliation_mod
 from agents import revenue_integrity as revenue_integrity_mod
+import security
+import revenue_enhancements as rev_enh
 
 app = Flask(__name__)
 
@@ -2324,6 +2326,313 @@ def claimit_dashboard():
         "unprocessed_feedback": feedback_unprocessed,
         "generated_at": now()
     })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+
+# ---------------- Security & Access Governance (Phase 7) ----------------
+
+@app.before_request
+def _security_logging():
+    """Log access for state-changing requests and sensitive endpoints."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") or request.path.startswith("/api/security"):
+        # Defer actual logging to after request via after_request
+        pass
+
+@app.after_request
+def _security_after_request(response):
+    """Log access events for mutating requests."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        try:
+            path = request.path
+            # Skip health/static/noise
+            if path in ("/api/health", "/api/agents", "/api/metrics"):
+                return response
+            resource = path.rsplit("/", 1)[-1] or path
+            resource_id = ""
+            # Try to extract an ID from the path
+            parts = path.rstrip("/").split("/")
+            if len(parts) >= 3 and parts[-1] and parts[-1].isdigit() is False and len(parts[-1]) > 5:
+                resource_id = parts[-1]
+            detail = f"{request.method} {path}"
+            if request.is_json:
+                try:
+                    data = request.get_json(silent=True) or {}
+                    if data.get("actor"):
+                        detail += f" actor={data.get('actor')}"
+                except Exception:
+                    pass
+            security.log_access(
+                action=request.method,
+                resource=resource,
+                resource_id=resource_id,
+                status="ok" if response.status_code < 400 else "error",
+                detail=detail,
+            )
+        except Exception:
+            pass
+    return response
+
+
+@app.get("/api/security/role-check")
+def security_role_check():
+    """Return the current user's role and facility (for frontend RBAC UI)."""
+    username = security._get_current_username()
+    if not username:
+        return jsonify(error="Authentication required"), 401
+    c = get_db()
+    try:
+        user = security._get_user_role(c, username)
+        if not user:
+            c.close()
+            return jsonify(error="User not found or inactive"), 403
+        c.close()
+        return jsonify({
+            "username": username,
+            "role": user.get("role"),
+            "facility_id": user.get("facility_id"),
+            "is_demo": security.is_demo_data(),
+        })
+    finally:
+        c.close()
+
+
+@app.get("/api/security/access-log")
+@security.require_role(["administrator", "revenue_cycle_manager"])
+def security_access_log():
+    """Return recent session access log entries (admin/manager only)."""
+    c = get_db()
+    try:
+        limit = int(request.args.get("limit", 50))
+        rows = c.execute(
+            """SELECT * FROM session_access_log ORDER BY timestamp DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        c.close()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        c.close()
+
+
+@app.post("/api/security/authorize")
+def security_authorize():
+    """Check if the current user is authorized for a sensitive action.
+
+    Body: { "action": "write_off_approval|financial_write|patient_merge|..." }
+    """
+    data = request.get_json(force=True)
+    action = data.get("action", "")
+    username = security._get_current_username()
+    if not username:
+        return jsonify(error="Authentication required"), 401
+    c = get_db()
+    try:
+        user = security._get_user_role(c, username)
+        if not user:
+            c.close()
+            return jsonify(error="User not found or inactive"), 403
+        role = user.get("role", "")
+        authorized = False
+        reason = ""
+        if action == "write_off_approval":
+            authorized = role in security.WRITE_OFF_APPROVAL_ROLES
+            reason = "Write-off approval requires administrator, revenue_cycle_manager, or finance_officer role."
+        elif action == "financial_write":
+            authorized = role in security.SENSITIVE_FINANCIAL_ROLES
+            reason = "Financial write operations require administrator, revenue_cycle_manager, finance_officer, or billing_officer role."
+        elif action == "patient_merge":
+            authorized = role in ("administrator", "revenue_cycle_manager")
+            reason = "Patient merge requires administrator or revenue_cycle_manager role."
+        else:
+            authorized = role in security.SENSITIVE_FINANCIAL_ROLES
+            reason = "Unknown action; defaulting to financial write authorization."
+        c.close()
+        return jsonify({
+            "username": username,
+            "role": role,
+            "action": action,
+            "authorized": authorized,
+            "reason": reason,
+        })
+    finally:
+        c.close()
+
+# ---------------- Phase 1: Command Center - Enhanced Overview & Actions ----------------
+
+@app.get("/api/command-center/overview")
+def command_center_overview_route():
+    return jsonify(rev_enh.command_center_overview())
+
+
+@app.get("/api/command-center/actions")
+def command_center_actions_route():
+    limit = int(request.args.get("limit", 20))
+    return jsonify(rev_enh.command_center_actions(limit=limit))
+
+
+# ---------------- Phase 2: Revenue Integrity - Leakage Findings ----------------
+
+@app.get("/api/revenue-integrity/leakage-findings")
+def revenue_leakage_findings_route():
+    filters = {
+        "status": request.args.get("status"),
+        "category": request.args.get("category"),
+        "severity": request.args.get("severity"),
+    }
+    filters = {k: v for k, v in filters.items() if v}
+    return jsonify(rev_enh.leakage_findings(filters=filters if filters else None))
+
+
+# ---------------- Phase 3: Payer Intelligence ----------------
+
+@app.get("/api/analytics/payer-intelligence")
+def analytics_payer_intelligence_route():
+    payer = request.args.get("payer")
+    filters = {"payer": payer} if payer else None
+    return jsonify(rev_enh.payer_intelligence(filters=filters))
+
+
+# ---------------- Phase 4: Revenue Cycle Performance Scorecard ----------------
+
+@app.get("/api/analytics/scorecard")
+def analytics_scorecard_route():
+    start = request.args.get("start")
+    end = request.args.get("end")
+    facility_id = request.args.get("facility_id")
+    department = request.args.get("department")
+    return jsonify(rev_enh.performance_scorecard(
+        start=start, end=end, facility_id=facility_id, department=department
+    ))
+
+
+# ---------------- Phase 5: Human Review & Accountability ----------------
+
+@app.get("/api/review-tasks/enhanced")
+def review_tasks_enhanced_route():
+    filters = {
+        "status": request.args.get("status"),
+        "priority": request.args.get("priority"),
+        "assigned_to": request.args.get("assigned_to"),
+    }
+    filters = {k: v for k, v in filters.items() if v}
+    return jsonify(rev_enh.enhanced_review_tasks(filters=filters if filters else None))
+
+
+@app.post("/api/review-tasks/<task_id>/resolve-enhanced")
+def review_tasks_resolve_enhanced_route(task_id):
+    data = request.get_json(force=True)
+    decision = data.get("decision")
+    reviewer = data.get("reviewer", "User")
+    notes = data.get("notes", "")
+    human_decision = data.get("human_decision")
+    result = rev_enh.resolve_review_task(
+        task_id, decision, reviewer, notes, human_decision
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+# ---------------- Phase 6: Revenue Impact Tracking ----------------
+
+@app.get("/api/revenue-impact")
+def revenue_impact_list_route():
+    filters = {
+        "lifecycle_stage": request.args.get("lifecycle_stage"),
+        "outcome_category": request.args.get("outcome_category"),
+        "related_claim_id": request.args.get("related_claim_id"),
+        "source_finding_type": request.args.get("source_finding_type"),
+    }
+    filters = {k: v for k, v in filters.items() if v}
+    return jsonify(rev_enh.list_revenue_impacts(filters=filters if filters else None))
+
+
+@app.post("/api/revenue-impact")
+def revenue_impact_create_route():
+    data = request.get_json(force=True)
+    source_finding_id = data.get("source_finding_id")
+    source_finding_type = data.get("source_finding_type", "leakage_finding")
+    original_issue = data.get("original_issue", "")
+    estimated_amount = float(data.get("estimated_amount", 0) or 0)
+    related_claim_id = data.get("related_claim_id")
+    related_encounter_id = data.get("related_encounter_id")
+    related_charge_id = data.get("related_charge_id")
+    related_payment_id = data.get("related_payment_id")
+    assigned_owner = data.get("assigned_owner")
+    actor = data.get("actor", "User")
+    evidence = data.get("evidence")
+
+    if not source_finding_id or not original_issue:
+        return jsonify(error="source_finding_id and original_issue are required"), 400
+
+    result = rev_enh.create_revenue_impact(
+        source_finding_id=source_finding_id,
+        source_finding_type=source_finding_type,
+        original_issue=original_issue,
+        estimated_amount=estimated_amount,
+        related_claim_id=related_claim_id,
+        related_encounter_id=related_encounter_id,
+        related_charge_id=related_charge_id,
+        related_payment_id=related_payment_id,
+        assigned_owner=assigned_owner,
+        actor=actor,
+        evidence=evidence,
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result), 201
+
+
+@app.post("/api/revenue-impact/<impact_id>/stage")
+def revenue_impact_stage_route(impact_id):
+    data = request.get_json(force=True)
+    new_stage = data.get("stage")
+    actor = data.get("actor", "User")
+    notes = data.get("notes", "")
+    if not new_stage:
+        return jsonify(error="stage is required"), 400
+    result = rev_enh.update_revenue_impact_stage(impact_id, new_stage, actor, notes)
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.post("/api/revenue-impact/<impact_id>/outcome")
+def revenue_impact_outcome_route(impact_id):
+    data = request.get_json(force=True)
+    outcome_category = data.get("outcome_category")
+    confirmed_amount = float(data.get("confirmed_amount", 0) or 0)
+    actor = data.get("actor", "User")
+    verified_by = data.get("verified_by")
+    evidence = data.get("evidence")
+    if not outcome_category:
+        return jsonify(error="outcome_category is required"), 400
+    result = rev_enh.record_revenue_impact_outcome(
+        impact_id, outcome_category, confirmed_amount, actor, verified_by, evidence
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.post("/api/revenue-impact/<impact_id>/close")
+def revenue_impact_close_route(impact_id):
+    data = request.get_json(silent=True) or {}
+    actor = data.get("actor", "User")
+    notes = data.get("notes", "")
+    result = rev_enh.close_revenue_impact(impact_id, actor, notes)
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+# ---------------- Phase 8: Integrated Revenue Integrity Check ----------------
+
+@app.post("/api/revenue-integrity/integrated-check")
+def revenue_integrity_integrated_route():
+    actor = request.args.get("actor", "System")
+    return jsonify(rev_enh.run_integrated_revenue_integrity(actor))
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)

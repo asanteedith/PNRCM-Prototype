@@ -1032,6 +1032,80 @@ SCHEMA = [
         evidence TEXT,
         FOREIGN KEY (facility_id) REFERENCES facilities(id)
     )""",
+    # ---------------- Revenue Impact Tracking (Phase 6) ----------------
+    """CREATE TABLE IF NOT EXISTS revenue_impact_tracking(
+        id TEXT PRIMARY KEY,
+        impact_id TEXT UNIQUE NOT NULL,
+        source_finding_id TEXT,
+        source_finding_type TEXT,
+        related_claim_id TEXT,
+        related_encounter_id TEXT,
+        related_charge_id TEXT,
+        related_payment_id TEXT,
+        original_issue TEXT,
+        lifecycle_stage TEXT DEFAULT 'IDENTIFIED',
+        initial_estimated_amount REAL DEFAULT 0,
+        confirmed_recovered_amount REAL DEFAULT 0,
+        confirmed_protected_amount REAL DEFAULT 0,
+        outcome_category TEXT,
+        assigned_owner TEXT,
+        human_verification_status TEXT DEFAULT 'unverified',
+        human_verifier TEXT,
+        verification_date TEXT,
+        resolution_date TEXT,
+        supporting_evidence TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (related_claim_id) REFERENCES claims(id),
+        FOREIGN KEY (related_encounter_id) REFERENCES encounters(id),
+        FOREIGN KEY (related_payment_id) REFERENCES payments(id)
+    )""",
+    # ---------------- Security & Access Governance (Phase 7) ----------------
+    """CREATE TABLE IF NOT EXISTS session_access_log(
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        user_id TEXT,
+        username TEXT,
+        role TEXT,
+        facility_id TEXT,
+        action TEXT,
+        resource TEXT,
+        resource_id TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        status TEXT,
+        timestamp TEXT,
+        created_at TEXT
+    )""",
+    """CREATE TABLE IF NOT EXISTS user_roles(
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        role TEXT NOT NULL,
+        facility_id TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT
+    )""",
+    # ---------------- Review Enhancements (Phase 5) ----------------
+    """CREATE TABLE IF NOT EXISTS review_task_escalations(
+        id TEXT PRIMARY KEY,
+        review_task_id TEXT,
+        escalated_from TEXT,
+        escalated_to TEXT,
+        reason TEXT,
+        escalated_at TEXT,
+        resolved_at TEXT,
+        FOREIGN KEY (review_task_id) REFERENCES review_tasks(id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS review_assignments(
+        id TEXT PRIMARY KEY,
+        review_task_id TEXT,
+        assigned_to TEXT,
+        assigned_by TEXT,
+        assigned_at TEXT,
+        unassigned_at TEXT,
+        FOREIGN KEY (review_task_id) REFERENCES review_tasks(id)
+    )""",
 ]
 
 DEFAULT_RULES = [
@@ -1080,6 +1154,32 @@ def init_db():
     _ensure_col(c, "agent_executions", "orchestrator_action", "TEXT")
     _ensure_col(c, "rcm_document_pages", "created_at", "TEXT")
     _ensure_col(c, "write_off_audits", "updated_at", "TEXT")
+    # Review task enhancements (Phase 5)
+    _ensure_col(c, "review_tasks", "due_date", "TEXT")
+    _ensure_col(c, "review_tasks", "priority", "TEXT")
+    _ensure_col(c, "review_tasks", "reviewer", "TEXT")
+    _ensure_col(c, "review_tasks", "human_decision", "TEXT")
+    _ensure_col(c, "review_tasks", "decision_timestamp", "TEXT")
+    _ensure_col(c, "review_tasks", "ai_recommendation", "TEXT")
+    _ensure_col(c, "review_tasks", "financial_impact", "REAL")
+    # Seed default user roles (Phase 7)
+    if c.execute("SELECT COUNT(*) n FROM user_roles").fetchone()["n"] == 0:
+        default_roles = [
+            ("admin", "administrator", None),
+            ("rev_mgr", "revenue_cycle_manager", None),
+            ("bill_off", "billing_officer", None),
+            ("claims_off", "claims_officer", None),
+            ("fin_off", "finance_officer", None),
+            ("doc_reviewer", "clinical_documentation_reviewer", None),
+            ("dept_staff", "department_staff", None),
+        ]
+        for uname, role, fac_id in default_roles:
+            rid = str(uuid.uuid4())
+            c.execute(
+                """INSERT INTO user_roles(id, username, role, facility_id, is_active, created_at, updated_at)
+                VALUES(?,?,?,?,1,?,?)""",
+                (rid, uname, role, fac_id, now(), now()),
+            )
     # Seed payer rules
     if c.execute("SELECT COUNT(*) n FROM payer_rules").fetchone()["n"] == 0:
         for r in DEFAULT_RULES:
@@ -1335,6 +1435,30 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_claimit_feedback_claim ON claimit_feedback(claim_id)",
         "CREATE INDEX IF NOT EXISTS idx_claimit_feedback_ref ON claimit_feedback(claim_ref)",
         "CREATE INDEX IF NOT EXISTS idx_claimit_log_claim ON claimit_activity_log(claim_ref)",
+    ]:
+        try: c.execute(idx_sql)
+        except Exception: pass
+    # Revenue impact tracking indexes (safe)
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_revenue_impact_impact_id ON revenue_impact_tracking(impact_id)",
+        "CREATE INDEX IF NOT EXISTS idx_revenue_impact_stage ON revenue_impact_tracking(lifecycle_stage)",
+        "CREATE INDEX IF NOT EXISTS idx_revenue_impact_claim ON revenue_impact_tracking(related_claim_id)",
+        "CREATE INDEX IF NOT EXISTS idx_revenue_impact_outcome ON revenue_impact_tracking(outcome_category)",
+    ]:
+        try: c.execute(idx_sql)
+        except Exception: pass
+    # Session access log indexes (safe)
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_session_access_user ON session_access_log(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_session_access_session ON session_access_log(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_session_access_timestamp ON session_access_log(timestamp)",
+    ]:
+        try: c.execute(idx_sql)
+        except Exception: pass
+    # Review escalation indexes (safe)
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_review_escalation_task ON review_task_escalations(review_task_id)",
+        "CREATE INDEX IF NOT EXISTS idx_review_assignment_task ON review_assignments(review_task_id)",
     ]:
         try: c.execute(idx_sql)
         except Exception: pass
