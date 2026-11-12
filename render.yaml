@@ -3,13 +3,17 @@ services:
     name: pnrcm-revenue-os
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: FLASK_ENV
         value: production
+      # Database lives on the mounted persistent disk so data survives
+      # deploys and restarts. Do NOT reset the database at startup.
+      - key: PNRCM_DB
+        value: /opt/render/project/src/data/pnrcm_demo.db
     disk:
       name: pnrcm-data
-      mountPath: /opt/render/project/src
+      mountPath: /opt/render/project/src/data
       sizeGB: 1

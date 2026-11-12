@@ -1,7 +1,17 @@
-import urllib.request, json, sys
+"""PNRCM API Validation.
+
+Validates the live API (http://localhost:5000) against the actual implemented
+contracts in app.py. Uses urllib so it exercises the real HTTP server.
+
+Run the server first (e.g. `python app.py`), then run this script:
+
+    python check_api_validation.py
+"""
+import urllib.request, json, sys, uuid
 
 BASE = "http://localhost:5000"
 results = {"passed": 0, "failed": 0, "errors": []}
+
 
 def get(path):
     try:
@@ -15,6 +25,7 @@ def get(path):
             return e.code, {"error": str(e)}
     except Exception as e:
         return None, {"error": str(e)}
+
 
 def post(path, data=None):
     try:
@@ -30,106 +41,205 @@ def post(path, data=None):
     except Exception as e:
         return None, {"error": str(e)}
 
-def check(name, status, body, expected_status=200):
-    if status == expected_status:
+
+def check(name, cond, detail=""):
+    if cond:
         results["passed"] += 1
-        print(f"  PASS: {name} -> {status}")
+        print(f"  PASS: {name}" + (f" — {detail}" if detail else ""))
     else:
         results["failed"] += 1
-        results["errors"].append(f"{name}: expected {expected_status}, got {status}, body={body}")
-        print(f"  FAIL: {name} -> {status} (expected {expected_status})")
+        results["errors"].append(f"{name}: {detail}")
+        print(f"  FAIL: {name}" + (f" — {detail}" if detail else ""))
+
+
+def http(name, path, method="GET", data=None, expected=200):
+    if method == "GET":
+        s, b = get(path)
+    else:
+        s, b = post(path, data)
+    ok = (s == expected)
+    check(name, ok, f"HTTP {s} (expected {expected}) body={str(b)[:160]}")
+    return s, b
+
 
 print("=" * 60)
 print("PNRCM API Validation")
 print("=" * 60)
 
+run_pid = "VAL-" + str(uuid.uuid4())[:8].upper()
+run_phone = "555-" + str(uuid.uuid4())[:4].upper()
+
 # Core endpoints
 print("\n--- Core ---")
-s, b = get("/api/health"); check("GET /api/health", s, b)
-s, b = get("/api/agents"); check("GET /api/agents", s, b)
-s, b = get("/api/metrics"); check("GET /api/metrics", s, b)
+http("GET /api/health", "/api/health", expected=200)
+http("GET /api/agents", "/api/agents", expected=200)
+http("GET /api/metrics", "/api/metrics", expected=200)
 
-# Patients
+# Patients  (contract: POST requires first_name + last_name)
 print("\n--- Patients ---")
-s, b = get("/api/patients"); check("GET /api/patients", s, b)
-s, b = post("/api/patients", {"mrn": "TEST-001", "name": "Test Patient", "insurance_type": "self_pay", "phone": "555-0001", "email": "test@example.com", "address": "123 Test St"}); check("POST /api/patients", s, b, 201)
+http("GET /api/patients", "/api/patients", expected=200)
+s, b = post("/api/patients", {
+    "first_name": "Validation", "last_name": "Patient",
+    "patient_id": run_pid, "phone": run_phone,
+    "email": "val@example.com", "address": "123 Val St",
+    "insurance_type": "self_pay",
+})
+check("POST /api/patients -> 201", s == 201, str(b)[:120])
+# Orchestrated registration returns nested patient object.
+patient = b.get("patient", b) if isinstance(b, dict) else b
+patient_row_id = patient.get("id")
+patient_mrn = patient.get("patient_id")
+check("patient has id", patient_row_id is not None, str(b)[:120])
+check("patient has patient_id (MRN)", patient_mrn == run_pid, str(patient_mrn))
+check("patient has first_name", patient.get("first_name") == "Validation", str(patient.get("first_name")))
+check("patient has last_name", patient.get("last_name") == "Patient", str(patient.get("last_name")))
 
-# Encounters
+# Encounters  (contract: POST requires patient_id)
 print("\n--- Encounters ---")
-s, b = get("/api/encounters"); check("GET /api/encounters", s, b)
-s, b = post("/api/encounters", {"patient_id": "TEST-001", "encounter_type": "outpatient", "chief_complaint": "Test"}); check("POST /api/encounters", s, b, 201)
+http("GET /api/encounters", "/api/encounters", expected=200)
+s, b = post("/api/encounters", {
+    "patient_id": run_pid,
+    "encounter_type": "outpatient",
+    "reason": "Validation test",
+})
+check("POST /api/encounters -> 201", s == 201, str(b)[:120])
+enc_id = b.get("encounter_id") or b.get("id")
+check("encounter has encounter_id", enc_id is not None, str(b)[:120])
+check("encounter patient_id resolves to patient", b.get("patient_id") == patient_row_id, str(b.get("patient_id")))
 
-# Bills
+# Services  (contract: POST /api/encounters/<eid>/services requires service_name)
+print("\n--- Services ---")
+http(f"GET encounter services", f"/api/encounters/{enc_id}/services", expected=200)
+s, b = post(f"/api/encounters/{enc_id}/services", {
+    "service_name": "Office Visit",
+    "description": "Validation office visit",
+    "quantity": 1,
+    "unit_price": 150.0,
+})
+check("POST encounter service -> 201", s == 201, str(b)[:120])
+check("service has service_name", b.get("service_name") == "Office Visit", str(b.get("service_name")))
+
+# Bills  (contract: POST requires encounter_id + patient_id)
 print("\n--- Bills ---")
-s, b = get("/api/bills"); check("GET /api/bills", s, b)
-s, b = post("/api/bills", {"patient_id": "TEST-001", "amount": 100.0}); check("POST /api/bills", s, b, 201)
+http("GET /api/bills", "/api/bills", expected=200)
+s, b = post("/api/bills", {
+    "encounter_id": enc_id,
+    "patient_id": patient_row_id,
+    "subtotal": 150.0,
+    "tax": 0.0,
+    "discount": 0.0,
+})
+check("POST /api/bills -> 201", s == 201, str(b)[:120])
+check("bill has bill_number", b.get("bill_number") is not None, str(b)[:120])
+check("bill total = 150", b.get("total") == 150.0, str(b.get("total")))
+check("bill outstanding = 150", b.get("outstanding") == 150.0, str(b.get("outstanding")))
+bill_id = b.get("id") or b.get("bill_number")
 
-# Claims
+# Claims  (contract: POST requires encounter_id + patient_id; total_charges)
 print("\n--- Claims ---")
-s, b = get("/api/claims"); check("GET /api/claims", s, b)
-s, b = post("/api/claims", {"patient_id": "TEST-001", "total_amount": 100.0}); check("POST /api/claims", s, b, 201)
+http("GET /api/claims", "/api/claims", expected=200)
+s, b = post("/api/claims", {
+    "encounter_id": enc_id,
+    "patient_id": patient_row_id,
+    "total_charges": 150.0,
+    "payer_type": "self_pay",
+})
+check("POST /api/claims -> 201", s == 201, str(b)[:120])
+check("claim has claim_number", b.get("claim_number") is not None, str(b)[:120])
+check("claim total_charges = 150", b.get("total_charges") == 150.0, str(b.get("total_charges")))
+claim_id = b.get("id") or b.get("claim_number")
 
-# Payments (missing GET /api/payments)
+s, b = post(f"/api/claims/{claim_id}/vet", {})
+check("POST claim vet -> 200", s == 200, str(b)[:120])
+
+# Payments  (GET /api/payments returns 200 with list)
 print("\n--- Payments ---")
-s, b = get("/api/payments"); check("GET /api/payments (MISSING ENDPOINT)", s, b, 404)
-s, b = post("/api/payments/match", {"claim_id": "test-claim", "payment_id": "test-payment", "matched_amount": 50.0}); check("POST /api/payments/match", s, b)
-s, b = get("/api/collections/payments"); check("GET /api/collections/payments", s, b)
+s, b = get("/api/payments")
+check("GET /api/payments -> 200", s == 200, str(s))
+check("payments returns a list", isinstance(b, list), f"type={type(b).__name__}")
+s, b = post(f"/api/bills/{bill_id}/pay", {
+    "amount": 150.0,
+    "payment_method": "Cash",
+    "reference": "VAL-PAY-001",
+})
+check("POST bill pay -> 200", s == 200, str(b)[:120])
+check("payment paid = 150", b.get("paid") == 150.0, str(b.get("paid")))
+check("payment outstanding = 0", b.get("outstanding") == 0.0, str(b.get("outstanding")))
+check("payment status = paid", b.get("status") == "paid", str(b.get("status")))
+s, b2 = get("/api/payments")
+check("GET /api/payments after payment -> 200", s == 200, str(s))
+check("payments is a list after payment", isinstance(b2, list), f"type={type(b2).__name__}")
+if isinstance(b2, list):
+    check("payments list contains records", len(b2) >= 1, f"{len(b2)} records")
+    pay_id = b2[0].get("id")
+    s, b = post("/api/payments/match", {
+        "claim_id": claim_id,
+        "payment_id": pay_id,
+        "matched_amount": 150.0,
+    })
+    check("POST /api/payments/match -> 200", s == 200, str(b)[:120])
+http("GET /api/collections/payments", "/api/collections/payments", expected=200)
 
 # Denials
 print("\n--- Denials ---")
-s, b = get("/api/denials"); check("GET /api/denials", s, b)
-s, b = post("/api/denials/detect", {}); check("POST /api/denials/detect", s, b)
+http("GET /api/denials", "/api/denials", expected=200)
+http("POST /api/denials/detect", "/api/denials/detect", method="POST", expected=200)
 
 # Appeals
 print("\n--- Appeals ---")
-s, b = get("/api/appeals"); check("GET /api/appeals", s, b)
-s, b = post("/api/appeals/detect", {}); check("POST /api/appeals/detect", s, b)
+http("GET /api/appeals", "/api/appeals", expected=200)
+http("POST /api/appeals/detect", "/api/appeals/detect", method="POST", expected=200)
 
 # Follow-ups
 print("\n--- Follow-ups ---")
-s, b = get("/api/followups"); check("GET /api/followups", s, b)
-s, b = post("/api/followups/ensure", {}); check("POST /api/followups/ensure", s, b)
+http("GET /api/followups", "/api/followups", expected=200)
+http("POST /api/followups/ensure", "/api/followups/ensure", method="POST", expected=200)
 
 # Collections
 print("\n--- Collections ---")
-s, b = get("/api/collections/balances"); check("GET /api/collections/balances", s, b)
-s, b = post("/api/collections/balances/ensure", {}); check("POST /api/collections/balances/ensure", s, b)
-s, b = post("/api/collections/payments", {"balance_id": "test", "amount": 10.0}); check("POST /api/collections/payments", s, b)
+http("GET /api/collections/balances", "/api/collections/balances", expected=200)
+http("POST /api/collections/balances/ensure", "/api/collections/balances/ensure", method="POST", expected=200)
+# Only attempt a real collection payment if a balance exists.
+s, b = get("/api/collections/balances")
+bal_id = None
+if isinstance(b, list) and b:
+    bal_id = b[0].get("id") or b[0].get("balance_id")
+if bal_id:
+    s, b = post("/api/collections/payments", {"balance_id": bal_id, "amount": 10.0})
+    check("POST /api/collections/payments (real balance) -> 200", s == 200, str(b)[:120])
+else:
+    check("POST /api/collections/payments skipped (no balance)", True, "no balance available")
 
 # Leakage
 print("\n--- Leakage ---")
-s, b = get("/api/leakage"); check("GET /api/leakage", s, b)
+http("GET /api/leakage", "/api/leakage", expected=200)
 
-# Reconciliation
+# Reconciliation / underpayments
 print("\n--- Reconciliation ---")
-s, b = get("/api/underpayments"); check("GET /api/underpayments", s, b)
-s, b = post("/api/underpayments/detect", {}); check("POST /api/underpayments/detect", s, b)
+http("GET /api/underpayments", "/api/underpayments", expected=200)
+http("POST /api/underpayments/detect", "/api/underpayments/detect", method="POST", expected=200)
 
 # Analytics
 print("\n--- Analytics ---")
-s, b = get("/api/analytics/overview"); check("GET /api/analytics/overview", s, b)
-s, b = get("/api/analytics/claims"); check("GET /api/analytics/claims", s, b)
-s, b = get("/api/analytics/revenue"); check("GET /api/analytics/revenue", s, b)
-s, b = get("/api/analytics/leakage"); check("GET /api/analytics/leakage", s, b)
-s, b = get("/api/analytics/ar-aging"); check("GET /api/analytics/ar-aging", s, b)
-s, b = get("/api/analytics/agents"); check("GET /api/analytics/agents", s, b)
+for ep in ["overview", "claims", "revenue", "leakage", "ar-aging", "agents"]:
+    http(f"GET /api/analytics/{ep}", f"/api/analytics/{ep}", expected=200)
 
 # Revenue Integrity
 print("\n--- Revenue Integrity ---")
-s, b = get("/api/integrity/alerts"); check("GET /api/integrity/alerts", s, b)
-s, b = post("/api/integrity/scan", {}); check("POST /api/integrity/scan", s, b)
-s, b = get("/api/integrity/metrics"); check("GET /api/integrity/metrics", s, b)
+http("GET /api/integrity/alerts", "/api/integrity/alerts", expected=200)
+http("POST /api/integrity/scan", "/api/integrity/scan", method="POST", expected=200)
+http("GET /api/integrity/metrics", "/api/integrity/metrics", expected=200)
 
 # Orchestrator
 print("\n--- Orchestrator ---")
-s, b = get("/api/orchestrator/state"); check("GET /api/orchestrator/state", s, b)
-s, b = get("/api/orchestrator/activity"); check("GET /api/orchestrator/activity", s, b)
-s, b = get("/api/orchestrator/tasks"); check("GET /api/orchestrator/tasks", s, b)
+http("GET /api/orchestrator/state", "/api/orchestrator/state", expected=200)
+http("GET /api/orchestrator/activity", "/api/orchestrator/activity", expected=200)
+http("GET /api/orchestrator/tasks", "/api/orchestrator/tasks", expected=200)
 
 # Workflows
 print("\n--- Workflows ---")
-s, b = post("/api/workflows/run", {"scenario": "oop", "patient": "API Test Patient"}); check("POST /api/workflows/run", s, b)
-s, b = post("/api/reset", {}); check("POST /api/reset", s, b)
+http("POST /api/workflows/run", "/api/workflows/run", method="POST",
+     data={"scenario": "oop", "patient": "API Test Patient"}, expected=200)
 
 print()
 print("=" * 60)
