@@ -1230,11 +1230,10 @@ async function init(){
   await safe(loadRoles);
   await safe(encList);
   await safe(docList);
-  await safe(clmList);
   await safe(riList);
   await safe(payList);
   await safe(anRefresh);
-  await safe(aiRefresh);
+  await safe(aiOrchestratorRefresh);
   await safe(rvList);
   await safe(cmdRefresh);
   await safe(regList);
@@ -1256,6 +1255,8 @@ async function codeResolve(decision){
    G. CLAIMS MANAGEMENT
    ================================================================ */
 async function clmList(){
+  const target = $el('clm-table-body');
+  if(!target) return; // legacy loader; claims are shown via clmprep/clmsub
   try{
     const clms = await api('/api/claims');
     const f = $el('clm-filter') ? $el('clm-filter').value : '';
@@ -1277,8 +1278,8 @@ async function clmList(){
         </td>
       </tr>`;
     });
-    $el('clm-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No claims found.</td></tr>';
-  }catch(e){ alert('Error loading claims: '+e.message); }
+    target.innerHTML = tb || '<tr><td colspan=8 class="empty">No claims found.</td></tr>';
+  }catch(e){ console.warn('clmList:', e.message); }
 }
 async function clmOpen(id, number){
   try{
