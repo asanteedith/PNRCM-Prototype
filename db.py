@@ -1,7 +1,9 @@
 """Database schema, migrations, and utilities for PNRCM."""
 import sqlite3, json, uuid, datetime, os
 
-DB = os.environ.get("PNRCM_DB", "pnrcm_demo.db")
+# DB path is ABSOLUTE, anchored to this file's directory, so the app always uses
+# the same database regardless of the working directory it is launched from.
+DB = os.environ.get("PNRCM_DB") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "pnrcm_demo.db")
 
 _wal_initialized = False
 
