@@ -264,46 +264,44 @@
       <section id="command" class="section active">
         <div class="page-header">
           <h1 class="page-title">Revenue Command Center</h1>
-          <p class="page-sub">Four questions: Where do we stand financially? Where is revenue stuck? What needs attention now? What are our AI agents doing?</p>
+          <p class="page-sub">Live operational status of the revenue cycle. Every figure below is computed in real time from persisted demo records &mdash; click any tile to drill into the underlying module.</p>
         </div>
         <div class="section-toolbar">
+          <span class="tag" style="padding:4px 8px"><span style="color:var(--success)">&#9679;</span> Live data</span>
           <select id="cmd-facility" onchange="cmdRefresh()"><option value="">All Facilities</option></select>
           <select id="cmd-payer" onchange="cmdRefresh()"><option value="">All Payers</option></select>
           <button class="btn sm" onclick="cmdRefresh()">Refresh</button>
+          <button class="btn sm" onclick="seedData()">Rebuild Demo Data</button>
         </div>
 
-        <!-- Q1: Financial Status -->
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">Q1. Where do we stand financially?</div>
-            <span class="tag">Live data</span>
+            <div class="card-title">Financial Position</div>
+            <span class="tag">Live &bull; /api/dashboard/overview</span>
           </div>
           <div class="metric-strip" id="cmd-financial"></div>
         </div>
 
-        <!-- Q2: Stuck Revenue -->
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">Q2. Where is revenue stuck?</div>
-            <span class="tag">A/R &amp; leakage</span>
+            <div class="card-title">Revenue At Risk</div>
+            <span class="tag">A/R &amp; leakage &bull; click to drill in</span>
           </div>
           <div class="grid-4" id="cmd-stuck"></div>
         </div>
 
-        <!-- Q3: Required Actions -->
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">Q3. What needs attention now?</div>
-            <span class="tag">Review queue</span>
+            <div class="card-title">Action Queue</div>
+            <span class="tag">Human review queue &bull; click to drill in</span>
           </div>
           <div class="grid-4" id="cmd-actions"></div>
         </div>
 
-        <!-- Q4: AI Operations -->
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">Q4. What are our AI agents doing?</div>
-            <span class="tag">Orchestrator</span>
+            <div class="card-title">AI Agent Operations</div>
+            <span class="tag">Orchestrator &bull; click to drill in</span>
           </div>
           <div class="grid-4" id="cmd-ai-ops"></div>
         </div>
@@ -668,29 +666,111 @@
       <!-- Analytics -->
       <section id="analytics" class="section">
         <div class="page-header">
-          <h1 class="page-title">Analytics &amp; Reports</h1>
-          <p class="page-sub">Operational analytics based on demonstration data. Export any table to CSV.</p>
+          <h1 class="page-title">Analytics &amp; Reporting</h1>
+          <p class="page-sub">Live operational, financial, revenue-integrity, and agent analytics derived from persisted records. All figures traceable to the database. Export any dataset to CSV.</p>
         </div>
-        <div class="section-toolbar">
-          <label style="font-size:10px;color:var(--muted);text-transform:uppercase">Date range</label>
-          <input type="date" id="an-start" onchange="anRefresh()">
-          <input type="date" id="an-end" onchange="anRefresh()">
-          <button class="btn sm" onclick="anRefresh()">Refresh</button>
+        <div class="section-toolbar" style="flex-wrap:wrap">
+          <span class="tag" style="padding:4px 8px">Tabs</span>
+          <button class="btn sm primary" id="an-tab-overview" onclick="anShowTab('overview')">Overview</button>
+          <button class="btn sm" id="an-tab-revenue" onclick="anShowTab('revenue')">Revenue &amp; A/R</button>
+          <button class="btn sm" id="an-tab-integrity" onclick="anShowTab('integrity')">Revenue Integrity</button>
+          <button class="btn sm" id="an-tab-agents" onclick="anShowTab('agents')">Agent Performance</button>
+          <button class="btn sm" id="an-tab-payers" onclick="anShowTab('payers')">Payer Intelligence</button>
+          <button class="btn sm" id="an-tab-reports" onclick="anShowTab('reports')">Reports</button>
+          <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+            <label style="font-size:10px;color:var(--muted);text-transform:uppercase">From</label>
+            <input type="date" id="an-start" onchange="anRefresh()">
+            <label style="font-size:10px;color:var(--muted);text-transform:uppercase">To</label>
+            <input type="date" id="an-end" onchange="anRefresh()">
+            <button class="btn sm" onclick="anRefresh()">Refresh</button>
+          </span>
         </div>
-        <div class="metric-strip" id="an-kpis"></div>
-        <div class="grid-2" style="margin-top:12px">
-          <div class="card"><div class="card-title">Claims by Status</div><div id="an-claims-dist" class="empty">Loading&#8230;</div></div>
-          <div class="card"><div class="card-title">A/R Aging</div><div id="an-aging" class="empty">Loading&#8230;</div></div>
+
+        <!-- OVERVIEW TAB -->
+        <div id="an-tab-overview-content">
+          <div class="metric-strip" id="an-kpis"></div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Claims by Status</div><div id="an-claims-dist" class="empty">Loading&#8230;</div></div>
+            <div class="card"><div class="card-title">A/R Aging (Outstanding)</div><div id="an-aging" class="empty">Loading&#8230;</div></div>
+          </div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Record Counts</div><div id="an-counts" class="empty">Loading&#8230;</div></div>
+            <div class="card"><div class="card-title">Financial Snapshot</div><div id="an-financial" class="empty">Loading&#8230;</div></div>
+          </div>
         </div>
-        <div class="card" style="margin-top:12px">
-          <div class="card-title">Export Reports</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn sm" onclick="anExport('claims')">Claims CSV</button>
-            <button class="btn sm" onclick="anExport('bills')">Bills CSV</button>
-            <button class="btn sm" onclick="anExport('payments')">Payments CSV</button>
-            <button class="btn sm" onclick="anExport('reconciliations')">Reconciliations CSV</button>
-            <button class="btn sm" onclick="anExport('denials')">Denials CSV</button>
-            <button class="btn sm" onclick="anExport('audit')">Audit Trail CSV</button>
+
+        <!-- REVENUE TAB -->
+        <div id="an-tab-revenue-content" style="display:none">
+          <div class="metric-strip" id="an-rev-kpis"></div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Revenue by Payer (Billed)</div><div id="an-rev-payer" class="empty">Loading&#8230;</div></div>
+            <div class="card"><div class="card-title">Reconciliation Metrics</div><div id="an-recon" class="empty">Loading&#8230;</div></div>
+          </div>
+          <div class="notice" style="margin-top:12px">Billed, approved, and collected are distinct measures. Estimated exposure is never presented as recovered revenue.</div>
+        </div>
+
+        <!-- INTEGRITY TAB -->
+        <div id="an-tab-integrity-content" style="display:none">
+          <div class="metric-strip" id="an-leak-kpis"></div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Leakage by Category (Estimated)</div><div id="an-leak-cat" class="empty">Loading&#8230;</div></div>
+            <div class="card"><div class="card-title">Leakage Cases by Status</div><div id="an-leak-status" class="empty">Loading&#8230;</div></div>
+          </div>
+        </div>
+
+        <!-- AGENTS TAB -->
+        <div id="an-tab-agents-content" style="display:none">
+          <div class="metric-strip" id="an-agent-kpis"></div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-title">Agent Performance</div>
+            <div style="overflow-x:auto">
+              <table class="data">
+                <thead><tr><th>Agent</th><th>Executions</th><th>Completed</th><th>Failed</th><th>Error Rate</th><th>Avg Duration</th><th>Needs Review</th></tr></thead>
+                <tbody id="an-agent-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAYERS TAB -->
+        <div id="an-tab-payers-content" style="display:none">
+          <div class="card">
+            <div class="card-title">Payer Intelligence</div>
+            <div style="overflow-x:auto">
+              <table class="data">
+                <thead><tr><th>Payer</th><th>Claims</th><th>Charges</th><th>Collected</th><th>Acceptance</th><th>Denial Rate</th><th>Avg Turnaround</th></tr></thead>
+                <tbody id="an-payer-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- REPORTS TAB -->
+        <div id="an-tab-reports-content" style="display:none">
+          <div class="card">
+            <div class="card-title">Export Reports</div>
+            <p class="page-sub">Download actual persisted data as CSV. Values are generated live from the database.</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn sm" onclick="anExport('claims')">Claims CSV</button>
+              <button class="btn sm" onclick="anExport('bills')">Bills CSV</button>
+              <button class="btn sm" onclick="anExport('payments')">Payments CSV</button>
+              <button class="btn sm" onclick="anExport('reconciliations')">Reconciliations CSV</button>
+              <button class="btn sm" onclick="anExport('denials')">Denials CSV</button>
+              <button class="btn sm" onclick="anExport('leakage')">Leakage CSV</button>
+              <button class="btn sm" onclick="anExport('audit')">Audit Trail CSV</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-title">Report Definitions</div>
+            <div class="small" style="color:var(--muted);line-height:1.6">
+              <div><strong>Claims</strong> &mdash; all claims with status, charges, approved, paid amounts.</div>
+              <div><strong>Bills</strong> &mdash; all bills with totals and outstanding balances.</div>
+              <div><strong>Payments</strong> &mdash; patient payments with method, amount, reconciliation status.</div>
+              <div><strong>Reconciliations</strong> &mdash; claim reconciliation records with variance.</div>
+              <div><strong>Denials</strong> &mdash; denied claims with reason, amount, status.</div>
+              <div><strong>Leakage</strong> &mdash; leakage cases with category, estimated exposure, status.</div>
+              <div><strong>Audit Trail</strong> &mdash; full audit log of all actions.</div>
+            </div>
           </div>
         </div>
       </section>
@@ -2083,29 +2163,182 @@ async function riResolve(id, cat){
 /* ================================================================
    O. ANALYTICS
    ================================================================ */
+let _anTab = 'overview';
+function anShowTab(tab){
+  _anTab = tab;
+  ['overview','revenue','integrity','agents','payers','reports'].forEach(t=>{
+    const btn=$el('an-tab-'+t); const c=$el('an-tab-'+t+'-content');
+    if(btn){ btn.classList.toggle('primary', t===tab); }
+    if(c) c.style.display = (t===tab)?'block':'none';
+  });
+  anRefresh();
+}
+
+function anKpi(label, value, sub){
+  return `<div class="metric"><div class="label">${esc(label)}</div><div class="value">${value}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
+}
+
 async function anRefresh(){
+  const start = ($el('an-start')||{}).value || '';
+  const end = ($el('an-end')||{}).value || '';
+  const qs = (start||end) ? ('?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)) : '';
+  // Always refresh the overview KPI strip (cheap) + the active tab
   try{
-    const ov = await api('/api/analytics/overview');
-    const kpis = ov.kpis||{};
-    let html='';
-    Object.entries(kpis).forEach(([k,v])=>{
-      html+=`<div class="metric"><div class="label">${esc(v.label||k)}</div><div class="value">${fmtMoney(v.value)}${v.unit||''}</div><div class="small">${esc(v.definition||'')}</div></div>`;
-    });
-    $el('an-kpis').innerHTML=html;
-    const ca = await api('/api/analytics/claims');
+    const ov = await api('/api/analytics/overview'+qs);
+    const k = ov.kpis||{};
+    let html = anKpi('Clean Claim Rate', (k.clean_claim_rate?.value ?? 0)+'%', k.clean_claim_rate?.definition||'');
+    html += anKpi('Denial Rate', (k.claim_denial_rate?.value ?? 0)+'%', k.claim_denial_rate?.definition||'');
+    html += anKpi('Potential Leakage', fmtMoney(k.potential_revenue_leakage?.value||0), 'Estimated, not confirmed');
+    html += anKpi('Approved Value', fmtMoney(k.total_approved_claim_value?.value||0), 'Approved claim value');
+    html += anKpi('Recovery Rate', (k.reimbursement_recovery_rate?.value ?? 0)+'%', 'Reimbursement recovered');
+    $el('an-kpis').innerHTML = html;
+  }catch(e){ $el('an-kpis').innerHTML = `<div class="error">Error: ${esc(e.message)}</div>`; }
+
+  if(_anTab==='overview') await anLoadOverview(qs);
+  else if(_anTab==='revenue') await anLoadRevenue(qs);
+  else if(_anTab==='integrity') await anLoadIntegrity();
+  else if(_anTab==='agents') await anLoadAgents();
+  else if(_anTab==='payers') await anLoadPayers();
+}
+
+async function anLoadOverview(qs){
+  // Claims by status
+  try{
+    const ca = await api('/api/analytics/claims'+qs);
     let ch='';
     Object.entries(ca.status_distribution||{}).forEach(([s,n])=>{
       ch+=`<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(s)}</span> <span style="float:right">${n}</span></div>`;
     });
     $el('an-claims-dist').innerHTML = ch || '<div class="empty">No claims.</div>';
-    const ag = await api('/api/analytics/ar-aging');
+    // counts
+    const cnt = [
+      ['Total Claims', ca.total_claims ?? (ca.claims||[]).length],
+      ['Approved', ca.approved_claims||0],
+      ['Pending', ca.pending_claims||0],
+      ['Rejected', ca.rejected_claims||0],
+      ['First-Pass Success', (ca.first_pass_success_rate||0)+'%'],
+      ['Rejection Rate', (ca.claim_rejection_rate||0)+'%'],
+    ];
+    $el('an-counts').innerHTML = cnt.map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span>${esc(l)}</span><strong>${esc(String(v))}</strong></div>`).join('');
+  }catch(e){ $el('an-claims-dist').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  // A/R aging
+  try{
+    const ag = await api('/api/analytics/ar-aging'+qs);
     let ah='';
     Object.entries(ag.buckets||{}).forEach(([k,v])=>{
-      ah+=`<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(k)} days</span> <span style="float:right">${fmtMoney(v.amount)} (${v.count})</span></div>`;
+      const amt = (v && typeof v==='object') ? v.amount : v;
+      const c = (v && typeof v==='object') ? v.count : '';
+      ah+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(k)} days</span><span>${fmtMoney(amt)}${c!==''?' ('+c+')':''}</span></div>`;
     });
     $el('an-aging').innerHTML = ah || '<div class="empty">No aging data.</div>';
-  }catch(e){ alert('Analytics error: '+e.message); }
+  }catch(e){ $el('an-aging').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  // Financial snapshot
+  try{
+    const rev = await api('/api/analytics/revenue'+qs);
+    const fin = [
+      ['Billed', fmtMoney(rev.billed_revenue||0)],
+      ['Approved', fmtMoney(rev.approved_revenue||0)],
+      ['Collected', fmtMoney(rev.collected_revenue||0)],
+      ['Outstanding', fmtMoney(rev.outstanding_reimbursement||0)],
+      ['Underpayments', fmtMoney(rev.underpayments||0)],
+    ];
+    $el('an-financial').innerHTML = fin.map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span>${esc(l)}</span><strong>${v}</strong></div>`).join('');
+  }catch(e){ $el('an-financial').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
 }
+
+async function anLoadRevenue(qs){
+  try{
+    const rev = await api('/api/analytics/revenue'+qs);
+    $el('an-rev-kpis').innerHTML =
+      anKpi('Billed', fmtMoney(rev.billed_revenue||0),'Total billed') +
+      anKpi('Approved', fmtMoney(rev.approved_revenue||0),'Approved by payer') +
+      anKpi('Collected', fmtMoney(rev.collected_revenue||0),'Verified received') +
+      anKpi('Outstanding', fmtMoney(rev.outstanding_reimbursement||0),'Still owed') +
+      anKpi('Underpayments', fmtMoney(rev.underpayments||0),'Paid below expected');
+    let ph='';
+    (rev.by_payer||[]).forEach(p=>{
+      ph+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(p.payer||'')}</span><span>${fmtMoney(p.amount||0)}</span></div>`;
+    });
+    $el('an-rev-payer').innerHTML = ph || '<div class="empty">No payer data.</div>';
+  }catch(e){ $el('an-rev-kpis').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  try{
+    const rc = await api('/api/reconciliation/metrics'+qs);
+    const k = rc.kpis||{};
+    const rows = [
+      ['Reconciled Payments', fmtMoney(k.total_reconciled_payments||0)],
+      ['Expected Reimbursement', fmtMoney(k.total_expected_reimbursement||0)],
+      ['Outstanding Reimbursement', fmtMoney(k.total_outstanding_reimbursement||0)],
+      ['Underpaid Claims', fmtMoney(k.total_underpaid_claims||0)],
+      ['Unreconciled Payments', fmtMoney(k.total_unreconciled_payments||0)],
+      ['Completion Rate', (rc.rates?.reconciliation_completion_rate||0)+'%'],
+    ];
+    $el('an-recon').innerHTML = rows.map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span>${esc(l)}</span><strong>${v}</strong></div>`).join('');
+  }catch(e){ $el('an-recon').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+
+async function anLoadIntegrity(){
+  try{
+    const lk = await api('/api/analytics/leakage');
+    $el('an-leak-kpis').innerHTML =
+      anKpi('Estimated Exposure', fmtMoney(lk.total_estimated||0),'Potential, not confirmed') +
+      anKpi('Confirmed', fmtMoney(lk.confirmed||0),'Confirmed leakage') +
+      anKpi('Verified Recovered', fmtMoney(lk.recovered||0),'Verified payment') +
+      anKpi('Unresolved', fmtMoney(lk.unresolved||0),'Still open');
+    let ch='';
+    (lk.by_category||[]).forEach(c=>{
+      ch+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(c.category||'')}</span><span>${fmtMoney(c.amount||0)}</span></div>`;
+    });
+    $el('an-leak-cat').innerHTML = ch || '<div class="empty">No leakage by category.</div>';
+    const st={};
+    (lk.cases||[]).forEach(c=>{ st[c.status||'DETECTED']=(st[c.status||'DETECTED']||0)+1; });
+    let sh='';
+    Object.entries(st).forEach(([s,n])=>{ sh+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee">${statusBadge(s)}<span>${n}</span></div>`; });
+    $el('an-leak-status').innerHTML = sh || '<div class="empty">No cases.</div>';
+  }catch(e){ $el('an-leak-kpis').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+
+async function anLoadAgents(){
+  try{
+    const ag = await api('/api/analytics/agents');
+    const agents = ag.agents||[];
+    $el('an-agent-kpis').innerHTML =
+      anKpi('Total Executions', ag.total_executions||0,'All agent runs') +
+      anKpi('Agents', agents.length,'Distinct agents');
+    let th='';
+    agents.forEach(a=>{
+      th+=`<tr>
+        <td>${esc(a.agent||'')}</td>
+        <td>${a.tasks ?? 0}</td>
+        <td>${a.success ?? 0}</td>
+        <td>${a.failed ?? 0}</td>
+        <td>${(a.error_rate||0)}%</td>
+        <td>${(a.avg_duration_ms||0)} ms</td>
+        <td>${a.needs_review ?? 0}</td>
+      </tr>`;
+    });
+    $el('an-agent-table').innerHTML = th || '<tr><td colspan=7 class="empty">No agent data.</td></tr>';
+  }catch(e){ $el('an-agent-kpis').innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+
+async function anLoadPayers(){
+  try{
+    const pi = await api('/api/analytics/payer-intelligence');
+    let th='';
+    (pi.payers||[]).forEach(p=>{
+      th+=`<tr>
+        <td>${esc(p.payer||'')}</td>
+        <td>${p.claims_submitted ?? 0}</td>
+        <td>${fmtMoney(p.total_charges||0)}</td>
+        <td>${fmtMoney(p.total_collected||0)}</td>
+        <td>${(p.acceptance_rate||0)}%</td>
+        <td>${(p.denial_rate||0)}%</td>
+        <td>${(p.average_reimbursement_turnaround_days||0)} d</td>
+      </tr>`;
+    });
+    $el('an-payer-table').innerHTML = th || '<tr><td colspan=7 class="empty">No payer data.</td></tr>';
+  }catch(e){ $el('an-payer-table').innerHTML = `<tr><td colspan=7 class="error">${esc(e.message)}</td></tr>`; }
+}
+
 async function anExport(type){
   try{
     let endpoint, filename;
@@ -2114,14 +2347,15 @@ async function anExport(type){
     else if(type==='payments'){ endpoint='/api/collections/payments'; filename='payments.csv'; }
     else if(type==='reconciliations'){ endpoint='/api/reconciliations'; filename='reconciliations.csv'; }
     else if(type==='denials'){ endpoint='/api/denials'; filename='denials.csv'; }
-    else if(type==='audit'){ endpoint='/api/audit/export.csv'; filename='audit_trail.csv'; window.location.href = API+endpoint; return; }
+    else if(type==='leakage'){ endpoint='/api/leakage/cases'; filename='leakage_cases.csv'; }
+    else if(type==='audit'){ window.location.href = API+'/api/audit/export.csv'; return; }
+    else return;
     const data = await api(endpoint);
     if(!Array.isArray(data)) throw new Error('Not a list');
-    const rows = data;
-    if(rows.length===0){ alert('No data to export'); return; }
-    const keys = Object.keys(rows[0]);
+    if(data.length===0){ alert('No data to export'); return; }
+    const keys = Object.keys(data[0]);
     let csv = keys.join(',')+'\n';
-    rows.forEach(r=>{ csv += keys.map(k=>{ const v=r[k]; const s = String(v==null?'':v); return s.includes(',')||s.includes('"')||s.includes('\n') ? '"'+s.replace(/"/g,'""')+'"' : s; }).join(',')+'\n'; });
+    data.forEach(r=>{ csv += keys.map(k=>{ const v=r[k]; const s = String(v==null?'':v); return s.includes(',')||s.includes('"')||s.includes('\n') ? '"'+s.replace(/"/g,'""')+'"' : s; }).join(',')+'\n'; });
     const blob = new Blob([csv],{type:'text/csv'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
@@ -2491,12 +2725,12 @@ async function cmdRefresh(){
     const leakageTotal = leakage.reduce((s,i)=>s+parseFloat(i.amount||0),0);
     const unreconciled = parseFloat(k&&k.unreconciled_payments||0);
     const stuck = [
-      ['A/R Outstanding', fmtMoney(arOutstanding)],
-      ['Denied Amount', fmtMoney(deniedAmount)],
-      ['Unreconciled Payments', fmtMoney(unreconciled)],
-      ['Potential Leakage', fmtMoney(leakageTotal)],
+      ['A/R Outstanding', fmtMoney(arOutstanding), 'ar'],
+      ['Denied Amount', fmtMoney(deniedAmount), 'denials'],
+      ['Unreconciled Payments', fmtMoney(unreconciled), 'payments'],
+      ['Potential Leakage', fmtMoney(leakageTotal), 'leakage-detection'],
     ];
-    $el('cmd-stuck').innerHTML=stuck.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+    $el('cmd-stuck').innerHTML=stuck.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} &rarr;</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-stuck').innerHTML = `<div class="error">Error loading stuck revenue: ${esc(e.message)}</div>`; }
 
   // Q3: Required Actions
@@ -2513,13 +2747,13 @@ async function cmdRefresh(){
     const pendingCodes = (codes||[]).filter(c=>c.status==='pending_review').length;
     const pendingRecs = (recs||[]).filter(r=>r.review_decision==='pending').length;
     const actions = [
-      ['Open Exceptions', openExceptions],
-      ['Pending Reviews', pendingReviews],
-      ['Documentation Reviews', pendingDocs],
-      ['Coding Reviews', pendingCodes],
-      ['Reconciliations Pending', pendingRecs],
+      ['Open Exceptions', openExceptions, 'review'],
+      ['Pending Reviews', pendingReviews, 'review'],
+      ['Documentation Reviews', pendingDocs, 'documentation'],
+      ['Coding Reviews', pendingCodes, 'coding'],
+      ['Reconciliations Pending', pendingRecs, 'payments'],
     ];
-    $el('cmd-actions').innerHTML=actions.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+    $el('cmd-actions').innerHTML=actions.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} &rarr;</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-actions').innerHTML = `<div class="error">Error loading actions: ${esc(e.message)}</div>`; }
 
   // Q4: AI Operations
@@ -2531,13 +2765,13 @@ async function cmdRefresh(){
     const agents = (st&&st.agents)||[];
     const activeAgents = agents.filter(a=>a.status&&a.status.toLowerCase()!=='idle').length;
     const aiOps = [
-      ['Total Agents', agents.length],
-      ['Active Agents', activeAgents],
-      ['Pending Tasks', m.pending||0],
-      ['Completed Tasks', m.completed||0],
-      ['Escalated', m.escalated||0],
+      ['Total Agents', agents.length, 'ai-orchestrator'],
+      ['Active Agents', activeAgents, 'ai-orchestrator'],
+      ['Pending Tasks', m.pending||0, 'ai-orchestrator'],
+      ['Completed Tasks', m.completed||0, 'ai-orchestrator'],
+      ['Escalated', m.escalated||0, 'review'],
     ];
-    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} &rarr;</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-ai-ops').innerHTML = `<div class="error">Error loading AI ops: ${esc(e.message)}</div>`; }
 
   // Recent Activity

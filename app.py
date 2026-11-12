@@ -1,5 +1,5 @@
 import json, uuid, csv, io, datetime, time, os
-from flask import Flask, render_template, request, jsonify, Response, g
+from flask import Flask, render_template, request, jsonify, Response, g, make_response
 import db
 from db import get_db, now, agent_execution_start, agent_execution_complete, audit, add_exception, add_transition, add_timeline
 from agents.claims_vetting import vet_claim, run_standards_rules
@@ -52,7 +52,13 @@ def event(c, rid, agent, msg, status="done", payload=None):
 
 @app.get("/")
 def home():
-    return render_template("index.html")
+    html = render_template("index.html")
+    resp = make_response(html)
+    # Prevent browsers from caching the SPA shell so the latest UI is always served
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 @app.get("/api/health")
 def health():
@@ -236,8 +242,17 @@ def create_patient():
 def list_encounters():
     c = get_db()
     rows = c.execute("SELECT * FROM encounters ORDER BY created_at DESC").fetchall()
+    out = []
+    for x in rows:
+        d = dict(x)
+        # Enrich with real charges/outstanding derived from services and bills
+        svc_total = c.execute("SELECT COALESCE(SUM(total_price),0) s FROM services WHERE encounter_id=?", (d["id"],)).fetchone()["s"]
+        bill = c.execute("SELECT COALESCE(SUM(outstanding),0) o, COALESCE(SUM(total),0) t FROM bills WHERE encounter_id=?", (d["id"],)).fetchone()
+        d["total_charges"] = round(float(svc_total or 0), 2)
+        d["outstanding"] = round(float((bill["o"] if bill else 0) or 0), 2)
+        out.append(d)
     c.close()
-    return jsonify([dict(x) for x in rows])
+    return jsonify(out)
 
 @app.get("/api/encounters/<eid>")
 def get_encounter(eid):
