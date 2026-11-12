@@ -113,6 +113,17 @@ SCHEMA = [
         FOREIGN KEY (encounter_id) REFERENCES encounters(id),
         FOREIGN KEY (patient_id) REFERENCES patients(id)
     )""",
+    """CREATE TABLE IF NOT EXISTS bill_line_items(
+        id TEXT PRIMARY KEY,
+        bill_id TEXT NOT NULL,
+        service_id TEXT,
+        line_code TEXT,
+        description TEXT,
+        amount REAL NOT NULL DEFAULT 0,
+        created_at TEXT,
+        FOREIGN KEY (bill_id) REFERENCES bills(id),
+        FOREIGN KEY (service_id) REFERENCES services(id)
+    )""",
     """CREATE TABLE IF NOT EXISTS claims(
         id TEXT PRIMARY KEY,
         claim_number TEXT UNIQUE,
@@ -312,17 +323,26 @@ SCHEMA = [
     )""",
     """CREATE TABLE IF NOT EXISTS leakage_cases(
         id TEXT PRIMARY KEY,
+        facility_id TEXT,
         category TEXT,
-        amount REAL,
-        estimated INTEGER DEFAULT 1,
+        description TEXT,
+        detection_source TEXT,
+        detection_rule TEXT,
+        supporting_evidence TEXT,
+        estimated_exposure REAL,
+        confirmed_amount REAL,
+        verified_recovered_amount REAL,
+        priority TEXT,
+        status TEXT DEFAULT 'DETECTED',
+        assigned_user TEXT,
+        recommended_action TEXT,
+        resolution_notes TEXT,
+        false_positive_reason TEXT,
         entity_type TEXT,
         entity_id TEXT,
         patient_id TEXT,
         encounter_id TEXT,
         claim_id TEXT,
-        evidence TEXT,
-        recommended_action TEXT,
-        status TEXT DEFAULT 'Detected',
         created_at TEXT,
         updated_at TEXT,
         resolved_at TEXT
@@ -1154,6 +1174,20 @@ def init_db():
     _ensure_col(c, "agent_executions", "orchestrator_action", "TEXT")
     _ensure_col(c, "rcm_document_pages", "created_at", "TEXT")
     _ensure_col(c, "write_off_audits", "updated_at", "TEXT")
+    # Leakage case schema enhancements (Revenue Leakage Detection & Resolution)
+    _ensure_col(c, "leakage_cases", "facility_id", "TEXT")
+    _ensure_col(c, "leakage_cases", "description", "TEXT")
+    _ensure_col(c, "leakage_cases", "detection_source", "TEXT")
+    _ensure_col(c, "leakage_cases", "detection_rule", "TEXT")
+    _ensure_col(c, "leakage_cases", "supporting_evidence", "TEXT")
+    _ensure_col(c, "leakage_cases", "estimated_exposure", "REAL")
+    _ensure_col(c, "leakage_cases", "confirmed_amount", "REAL")
+    _ensure_col(c, "leakage_cases", "verified_recovered_amount", "REAL")
+    _ensure_col(c, "leakage_cases", "priority", "TEXT")
+    _ensure_col(c, "leakage_cases", "assigned_user", "TEXT")
+    _ensure_col(c, "leakage_cases", "resolution_notes", "TEXT")
+    _ensure_col(c, "leakage_cases", "false_positive_reason", "TEXT")
+    _ensure_col(c, "leakage_cases", "detection_date", "TEXT")
     # Review task enhancements (Phase 5)
     _ensure_col(c, "review_tasks", "due_date", "TEXT")
     _ensure_col(c, "review_tasks", "priority", "TEXT")

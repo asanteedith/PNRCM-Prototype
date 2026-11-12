@@ -5,7 +5,7 @@ from db import get_db, now, agent_execution_start, agent_execution_complete, aud
 from agents.claims_vetting import vet_claim, run_standards_rules
 from agents.documentation import review_documentation, resolve_documentation_review
 from agents.billing import generate_bill, validate_bill
-from agents.leakage import detect_leakage
+from agents import leakage as leakage_mod
 from agents.eligibility import check_eligibility, check_encounter_eligibility, create_eligibility_task
 from agents.prior_auth import check_authorizations, create_authorization, create_auth_task
 from agents.denial import detect_denials, list_denials, resolve_denial, denial_patterns
@@ -451,6 +451,199 @@ def billing_validate_route(bid):
     result = validate_bill(bid)
     return (jsonify(result[0]), result[1]) if isinstance(result, tuple) else jsonify(result)
 
+# ---------------- Bill Lifecycle (Phase 2: Billing Module) ----------------
+
+BILL_STATUSES = ["draft", "validation", "review", "approved", "claims_ready", "submitted"]
+
+BILL_TRANSITIONS = {
+    "draft": ["validation"],
+    "validation": ["review", "draft"],
+    "review": ["approved", "draft"],
+    "approved": ["claims_ready"],
+    "claims_ready": ["submitted"],
+    "submitted": [],
+}
+
+def _bill_transition_allowed(current, target):
+    return target in BILL_TRANSITIONS.get(current, [])
+
+@app.get("/api/bills/<bid>/workflow-status")
+def billing_workflow_status(bid):
+    """Return bill workflow status and allowed transitions."""
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    c.close()
+    if not bill:
+        return jsonify(error="Bill not found"), 404
+    current = bill["status"] or "draft"
+    allowed = BILL_TRANSITIONS.get(current, [])
+    return jsonify({
+        "bill_id": bill["id"],
+        "bill_number": bill["bill_number"],
+        "current_status": current,
+        "allowed_transitions": allowed,
+        "total": bill["total"],
+        "paid": bill["paid"],
+        "outstanding": bill["outstanding"],
+    })
+
+@app.post("/api/bills/<bid>/transition")
+def billing_transition_route(bid):
+    """Transition a bill through its lifecycle statuses."""
+    data = request.get_json(force=True)
+    to_status = data.get("to_status")
+    actor = data.get("actor", "User")
+    reason = data.get("reason", "")
+    if not to_status:
+        return jsonify(error="to_status is required"), 400
+    if to_status not in BILL_STATUSES:
+        return jsonify(error=f"Invalid status. Must be one of: {', '.join(BILL_STATUSES)}"), 400
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    current = bill["status"] or "draft"
+    if not _bill_transition_allowed(current, to_status):
+        c.close()
+        return jsonify(error=f"Transition from {current} to {to_status} not allowed. Allowed: {BILL_TRANSITIONS.get(current, [])}"), 400
+    prev = current
+    c.execute("UPDATE bills SET status=?, updated_at=? WHERE id=?", (to_status, now(), bill["id"]))
+    audit(c, actor, "user", "Billing", f"Bill status transitioned to {to_status}", "bill", bill["id"], previous_state=prev, new_state=to_status, input_summary=json.dumps({"reason": reason}))
+    c.commit(); c.close()
+    return jsonify({"ok": True, "bill_id": bill["id"], "bill_number": bill["bill_number"], "previous_status": prev, "current_status": to_status})
+
+@app.post("/api/bills/<bid>/approve")
+def billing_approve_route(bid):
+    """Approve a bill in review status."""
+    data = request.get_json(force=True)
+    actor = data.get("actor", "User")
+    notes = data.get("notes", "")
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    current = bill["status"] or "draft"
+    if current != "review":
+        c.close(); return jsonify(error=f"Bill must be in 'review' status to approve. Current: {current}"), 400
+    c.execute("UPDATE bills SET status='approved', updated_at=? WHERE id=?", (now(), bill["id"]))
+    audit(c, actor, "user", "Billing", "Bill approved", "bill", bill["id"], previous_state=current, new_state="approved", input_summary=json.dumps({"notes": notes}))
+    c.commit(); c.close()
+    return jsonify({"ok": True, "bill_id": bill["id"], "bill_number": bill["bill_number"], "status": "approved"})
+
+@app.post("/api/bills/<bid>/reject")
+def billing_reject_route(bid):
+    """Reject a bill, returning it to draft for correction."""
+    data = request.get_json(force=True)
+    actor = data.get("actor", "User")
+    reason = data.get("reason", "")
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    current = bill["status"] or "draft"
+    if current not in ("review", "validation"):
+        c.close(); return jsonify(error=f"Bill must be in 'review' or 'validation' status to reject. Current: {current}"), 400
+    c.execute("UPDATE bills SET status='draft', updated_at=? WHERE id=?", (now(), bill["id"]))
+    audit(c, actor, "user", "Billing", "Bill rejected", "bill", bill["id"], previous_state=current, new_state="draft", input_summary=json.dumps({"reason": reason}))
+    c.commit(); c.close()
+    return jsonify({"ok": True, "bill_id": bill["id"], "bill_number": bill["bill_number"], "status": "draft"})
+
+@app.post("/api/bills/<bid>/correct")
+def billing_correct_route(bid):
+    """Mark a bill as needing correction, returning to validation."""
+    data = request.get_json(force=True)
+    actor = data.get("actor", "User")
+    reason = data.get("reason", "")
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    current = bill["status"] or "draft"
+    if current != "review":
+        c.close(); return jsonify(error=f"Bill must be in 'review' status to request correction. Current: {current}"), 400
+    c.execute("UPDATE bills SET status='validation', updated_at=? WHERE id=?", (now(), bill["id"]))
+    audit(c, actor, "user", "Billing", "Bill correction requested", "bill", bill["id"], previous_state=current, new_state="validation", input_summary=json.dumps({"reason": reason}))
+    c.commit(); c.close()
+    return jsonify({"ok": True, "bill_id": bill["id"], "bill_number": bill["bill_number"], "status": "validation"})
+
+@app.get("/api/bills/<bid>/line-items")
+def billing_line_items_list(bid):
+    """List line items for a bill."""
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    rows = c.execute("SELECT * FROM bill_line_items WHERE bill_id=? ORDER BY created_at", (bill["id"],)).fetchall()
+    c.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.post("/api/bills/<bid>/line-items")
+def billing_line_item_create(bid):
+    """Add a line item to a bill."""
+    data = request.get_json(force=True)
+    service_id = data.get("service_id")
+    line_code = data.get("line_code", "")
+    description = data.get("description", "")
+    amount = float(data.get("amount", 0) or 0)
+    if amount <= 0:
+        return jsonify(error="amount must be positive"), 400
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    if service_id:
+        svc = c.execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
+        if not svc:
+            c.close(); return jsonify(error="Service not found"), 404
+    lid = str(uuid.uuid4())
+    c.execute(
+        """INSERT INTO bill_line_items(id, bill_id, service_id, line_code, description, amount, created_at)
+        VALUES(?,?,?,?,?,?,?)""",
+        (lid, bill["id"], service_id, line_code, description, amount, now())
+    )
+    c.commit(); row = c.execute("SELECT * FROM bill_line_items WHERE id=?", (lid,)).fetchone(); c.close()
+    return jsonify(dict(row)), 201
+
+@app.post("/api/bills/<bid>/to-claim")
+def billing_to_claim_route(bid):
+    """Create a claim from an approved bill (bill-to-claim integration)."""
+    data = request.get_json(force=True)
+    actor = data.get("actor", "User")
+    payer_type = data.get("payer_type", "self_pay")
+    payer_name = data.get("payer_name", "Self Pay")
+    claim_type = data.get("claim_type", "professional")
+    diagnosis_codes = data.get("diagnosis_codes")
+    procedure_codes = data.get("procedure_codes")
+    c = get_db()
+    bill = c.execute("SELECT * FROM bills WHERE id=? OR bill_number=?", (bid, bid)).fetchone()
+    if not bill:
+        c.close(); return jsonify(error="Bill not found"), 404
+    current = bill["status"] or "draft"
+    if current not in ("approved", "claims_ready"):
+        c.close(); return jsonify(error=f"Bill must be 'approved' or 'claims_ready' to create a claim. Current: {current}"), 400
+    # Check for existing claim from this bill
+    existing = c.execute("SELECT id FROM claims WHERE bill_id=? LIMIT 1", (bill["id"],)).fetchone()
+    if existing:
+        c.close(); return jsonify(error="Claim already exists for this bill"), 409
+    enc = c.execute("SELECT * FROM encounters WHERE id=?", (bill["encounter_id"],)).fetchone()
+    if not enc:
+        c.close(); return jsonify(error="Encounter not found"), 404
+    cid = str(uuid.uuid4())
+    claim_number = data.get("claim_number") or ("CLM-" + str(uuid.uuid4())[:8].upper())
+    dx = json.dumps(diagnosis_codes) if diagnosis_codes else None
+    proc = json.dumps(procedure_codes) if procedure_codes else None
+    total = float(bill["total"] or 0)
+    c.execute(
+        """INSERT INTO claims(id, claim_number, encounter_id, patient_id, bill_id, payer_type, payer_name, claim_type, diagnosis_codes, procedure_codes, total_charges, status, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?, 'draft', ?, ?)""",
+        (cid, claim_number, enc["id"], bill["patient_id"], bill["id"], payer_type, payer_name, claim_type, dx, proc, total, now(), now())
+    )
+    # Advance bill to claims_ready
+    c.execute("UPDATE bills SET status='claims_ready', updated_at=? WHERE id=?", (now(), bill["id"]))
+    audit(c, actor, "user", "Billing", "Claim created from bill", "bill", bill["id"], previous_state=current, new_state="claims_ready", input_summary=json.dumps({"claim_id": cid, "claim_number": claim_number}))
+    c.commit(); row = c.execute("SELECT * FROM claims WHERE id=?", (cid,)).fetchone(); c.close()
+    return jsonify(dict(row)), 201
+
 # ---------------- Claims ----------------
 @app.get("/api/claims")
 def list_claims():
@@ -619,15 +812,128 @@ def billing_generate_route(eid):
 # ---------------- Leakage ----------------
 @app.get("/api/leakage")
 def leakage_route():
-    snap = detect_leakage(create_tasks=True)
+    snap = leakage_mod.detect_leakage(create_tasks=True)
     return jsonify(snap)
+
+@app.get("/api/leakage/cases")
+def leakage_cases_list_route():
+    filters = request.args.to_dict()
+    return jsonify(leakage_mod.list_leakage_cases(filters=filters if filters else None))
+
+@app.get("/api/leakage/cases/<case_id>")
+def leakage_case_get_route(case_id):
+    case = leakage_mod.get_leakage_case(case_id)
+    if not case:
+        return jsonify(error="Leakage case not found"), 404
+    return jsonify(case)
+
+@app.post("/api/leakage/cases/<case_id>/assign")
+def leakage_case_assign_route(case_id):
+    data = request.get_json(force=True)
+    assigned_user = data.get("assigned_user", "Unassigned")
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.assign_leakage_case(case_id, assigned_user, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/prioritize")
+def leakage_case_prioritize_route(case_id):
+    data = request.get_json(force=True)
+    priority = data.get("priority", "medium")
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.prioritize_leakage_case(case_id, priority, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/confirm")
+def leakage_case_confirm_route(case_id):
+    data = request.get_json(force=True)
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.confirm_leakage_case(case_id, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/require-action")
+def leakage_case_require_action_route(case_id):
+    data = request.get_json(force=True)
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.require_action(case_id, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/dismiss")
+def leakage_case_dismiss_route(case_id):
+    data = request.get_json(force=True)
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.dismiss_leakage_case(case_id, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/false-positive")
+def leakage_case_false_positive_route(case_id):
+    data = request.get_json(force=True)
+    reason = data.get("false_positive_reason", "")
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.mark_false_positive(case_id, reason, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/reopen")
+def leakage_case_reopen_route(case_id):
+    data = request.get_json(force=True)
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.reopen_leakage_case(case_id, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/start-action")
+def leakage_case_start_action_route(case_id):
+    data = request.get_json(force=True)
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.start_corrective_action(case_id, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
 
 @app.post("/api/leakage/cases/<case_id>/resolve")
 def leakage_case_resolve_route(case_id):
     data = request.get_json(force=True)
-    resolution = data.get("resolution", "resolved")
     resolved_by = data.get("resolved_by", "User")
-    return jsonify(resolve_leakage_case(case_id, resolution, resolved_by))
+    resolution_notes = data.get("resolution_notes", None)
+    r = leakage_mod.resolve_leakage_case(case_id, resolved_by, resolution_notes)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/notes")
+def leakage_case_notes_route(case_id):
+    data = request.get_json(force=True)
+    notes = data.get("notes", "")
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.add_case_notes(case_id, notes, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/confirmed-amount")
+def leakage_case_confirmed_amount_route(case_id):
+    data = request.get_json(force=True)
+    amount = float(data.get("amount", 0))
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.record_confirmed_amount(case_id, amount, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.post("/api/leakage/cases/<case_id>/recovered-amount")
+def leakage_case_recovered_amount_route(case_id):
+    data = request.get_json(force=True)
+    amount = float(data.get("amount", 0))
+    resolved_by = data.get("resolved_by", "User")
+    r = leakage_mod.record_recovered_amount(case_id, amount, resolved_by)
+    return (jsonify(r[0]), r[1]) if isinstance(r, tuple) else jsonify(r)
+
+@app.get("/api/leakage/analytics")
+def leakage_analytics_route():
+    return jsonify(leakage_mod.leakage_analytics())
+
+@app.get("/api/leakage/categories")
+def leakage_categories_route():
+    return jsonify({
+        "categories": leakage_mod.CATEGORY_MAP,
+        "severities": leakage_mod.SEVERITY_MAP,
+        "priorities": leakage_mod.PRIORITY_MAP,
+        "lifecycle": {
+            "valid_transitions": leakage_mod.VALID_TRANSITIONS,
+            "terminal_states": list(leakage_mod.TERMINAL_STATES),
+            "confirmed_states": list(leakage_mod.CONFIRMED_STATES),
+        },
+    })
 
 # ---------------- Denials ----------------
 @app.post("/api/denials/detect")
@@ -2624,6 +2930,123 @@ def revenue_impact_close_route(impact_id):
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
+
+
+# ---------------- Phase 4: Revenue Context Layer ----------------
+
+@app.get("/api/context/patient/<patient_id>")
+def revenue_context_patient(patient_id):
+    """Full revenue context chain for a patient:
+    patient → encounters → services → bills → claims → payments"""
+    c = get_db()
+    pat = c.execute("SELECT * FROM patients WHERE id=? OR patient_id=?", (patient_id, patient_id)).fetchone()
+    if not pat:
+        c.close(); return jsonify(error="Patient not found"), 404
+    pd = dict(pat)
+    encounters = [dict(r) for r in c.execute("SELECT * FROM encounters WHERE patient_id=? ORDER BY created_at DESC", (pd["id"],)).fetchall()]
+    result = {
+        "patient": pd,
+        "encounters": [],
+        "currency": "GHS",
+    }
+    for enc in encounters:
+        ed = dict(enc)
+        services = [dict(r) for r in c.execute("SELECT * FROM services WHERE encounter_id=? ORDER BY created_at", (ed["id"],)).fetchall()]
+        bills = [dict(r) for r in c.execute("SELECT * FROM bills WHERE encounter_id=? ORDER BY created_at DESC", (ed["id"],)).fetchall()]
+        claim_list = []
+        for b in bills:
+            claims_for_bill = [dict(r) for r in c.execute("SELECT * FROM claims WHERE bill_id=? ORDER BY created_at DESC", (b["id"],)).fetchall()]
+            for cl in claims_for_bill:
+                payments = [dict(r) for r in c.execute("SELECT * FROM payments WHERE claim_id=? ORDER BY created_at DESC", (cl["id"],)).fetchall()]
+                allocations = [dict(r) for r in c.execute("SELECT * FROM payment_allocations WHERE claim_id=? ORDER BY allocated_at DESC", (cl["id"],)).fetchall()]
+                cl["payments"] = payments
+                cl["allocations"] = allocations
+                claim_list.append(cl)
+        b_with_claims = []
+        for b in bills:
+            bd = dict(b)
+            bd["claims"] = [cl for cl in claim_list if cl.get("bill_id") == b["id"]]
+            b_with_claims.append(bd)
+        ed["services"] = services
+        ed["bills"] = b_with_claims
+        result["encounters"].append(ed)
+    c.close()
+    return jsonify(result)
+
+
+@app.get("/api/context/encounter/<encounter_id>")
+def revenue_context_encounter(encounter_id):
+    """Revenue context chain for a single encounter:
+    encounter → services → bills → claims → payments"""
+    c = get_db()
+    enc = c.execute("SELECT * FROM encounters WHERE id=? OR encounter_id=?", (encounter_id, encounter_id)).fetchone()
+    if not enc:
+        c.close(); return jsonify(error="Encounter not found"), 404
+    ed = dict(enc)
+    pat = c.execute("SELECT * FROM patients WHERE id=?", (ed["patient_id"],)).fetchone()
+    services = [dict(r) for r in c.execute("SELECT * FROM services WHERE encounter_id=? ORDER BY created_at", (ed["id"],)).fetchall()]
+    bills = [dict(r) for r in c.execute("SELECT * FROM bills WHERE encounter_id=? ORDER BY created_at DESC", (ed["id"],)).fetchall()]
+    claim_list = []
+    for b in bills:
+        claims_for_bill = [dict(r) for r in c.execute("SELECT * FROM claims WHERE bill_id=? ORDER BY created_at DESC", (b["id"],)).fetchall()]
+        for cl in claims_for_bill:
+            payments = [dict(r) for r in c.execute("SELECT * FROM payments WHERE claim_id=? ORDER BY created_at DESC", (cl["id"],)).fetchall()]
+            allocations = [dict(r) for r in c.execute("SELECT * FROM payment_allocations WHERE claim_id=? ORDER BY allocated_at DESC", (cl["id"],)).fetchall()]
+            cl["payments"] = payments
+            cl["allocations"] = allocations
+            claim_list.append(cl)
+    b_with_claims = []
+    for b in bills:
+        bd = dict(b)
+        bd["claims"] = [cl for cl in claim_list if cl.get("bill_id") == b["id"]]
+        b_with_claims.append(bd)
+    c.close()
+    return jsonify({
+        "encounter": ed,
+        "patient": dict(pat) if pat else None,
+        "services": services,
+        "bills": b_with_claims,
+        "currency": "GHS",
+    })
+
+
+@app.get("/api/context/claim/<claim_id>")
+def revenue_context_claim(claim_id):
+    """Revenue context chain for a single claim:
+    claim → bill → encounter → patient → services → payments"""
+    c = get_db()
+    cl = c.execute("SELECT * FROM claims WHERE id=? OR claim_number=?", (claim_id, claim_id)).fetchone()
+    if not cl:
+        c.close(); return jsonify(error="Claim not found"), 404
+    cd = dict(cl)
+    bill = None
+    services = []
+    enc = None
+    pat = None
+    if cd.get("bill_id"):
+        bill = c.execute("SELECT * FROM bills WHERE id=?", (cd["bill_id"],)).fetchone()
+        if bill:
+            bd = dict(bill)
+            enc = c.execute("SELECT * FROM encounters WHERE id=?", (bd["encounter_id"],)).fetchone()
+            if enc:
+                ed = dict(enc)
+                services = [dict(r) for r in c.execute("SELECT * FROM services WHERE encounter_id=? ORDER BY created_at", (ed["id"],)).fetchall()]
+                pat = c.execute("SELECT * FROM patients WHERE id=?", (ed["patient_id"],)).fetchone()
+            bd["services"] = services
+            bill = bd
+    payments = [dict(r) for r in c.execute("SELECT * FROM payments WHERE claim_id=? ORDER BY created_at DESC", (cd["id"],)).fetchall()]
+    allocations = [dict(r) for r in c.execute("SELECT * FROM payment_allocations WHERE claim_id=? ORDER BY allocated_at DESC", (cd["id"],)).fetchall()]
+    c.close()
+    return jsonify({
+        "claim": cd,
+        "payments": payments,
+        "allocations": allocations,
+        "bill": dict(bill) if bill else None,
+        "encounter": dict(enc) if enc else None,
+        "services": services,
+        "patient": dict(pat) if pat else None,
+        "currency": "GHS",
+    })
 
 
 # ---------------- Phase 8: Integrated Revenue Integrity Check ----------------

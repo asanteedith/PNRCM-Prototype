@@ -209,37 +209,36 @@
       <span class="demo-badge">SYNTHETIC DATA</span>
     </div>
     <nav>
-      <div class="nav-group"><div class="nav-group-title">Command</div>
+      <div class="nav-group"><div class="nav-group-title">Revenue Operations</div>
         <a class="nav-item active" id="nav-command" onclick="showSection('command')"><span class="icon">&#9881;</span>Command Center</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Patient Access</div>
+        <a class="nav-item" id="nav-encounters" onclick="showSection('encounters')"><span class="icon">&#128197;</span>Encounter Workspace</a>
         <a class="nav-item" id="nav-registration" onclick="showSection('registration')"><span class="icon">&#128100;</span>Registration &amp; Eligibility</a>
         <a class="nav-item" id="nav-authorization" onclick="showSection('authorization')"><span class="icon">&#128205;</span>Prior Authorization</a>
       </div>
-      <div class="nav-group"><div class="nav-group-title">Clinical &amp; Charges</div>
-        <a class="nav-item" id="nav-encounters" onclick="showSection('encounters')"><span class="icon">&#128197;</span>Encounter Workspace</a>
-        <a class="nav-item" id="nav-documentation" onclick="showSection('documentation')"><span class="icon">&#128221;</span>Documentation &amp; Charges</a>
-        <a class="nav-item" id="nav-coding" onclick="showSection('coding')"><span class="icon">&#128219;</span>AI Coding Review</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Claims</div>
+      <div class="nav-group"><div class="nav-group-title">Claims &amp; Collections</div>
+        <a class="nav-item" id="nav-billing" onclick="showSection('billing')"><span class="icon">&#128202;</span>Billing Module</a>
         <a class="nav-item" id="nav-claims" onclick="showSection('claims')"><span class="icon">&#128176;</span>Claims Management</a>
         <a class="nav-item" id="nav-claim-prep" onclick="showSection('claim-prep')"><span class="icon">&#128218;</span>Claim Preparation</a>
         <a class="nav-item" id="nav-claim-submit" onclick="showSection('claim-submit')"><span class="icon">&#128226;</span>Submission &amp; Payer</a>
-        <a class="nav-item" id="nav-claimit" onclick="showSection('claimit')"><span class="icon">&#128204;</span>CLAIM-it Integration</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Revenue Integrity</div>
         <a class="nav-item" id="nav-denials" onclick="showSection('denials')"><span class="icon">&#128169;</span>Denial Management</a>
         <a class="nav-item" id="nav-ar" onclick="showSection('ar')"><span class="icon">&#128177;</span>AR &amp; Follow-Up</a>
         <a class="nav-item" id="nav-payments" onclick="showSection('payments')"><span class="icon">&#128179;</span>Payments &amp; Reconciliation</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Revenue Intelligence</div>
+        <a class="nav-item" id="nav-documentation" onclick="showSection('documentation')"><span class="icon">&#128221;</span>Documentation &amp; Charges</a>
+        <a class="nav-item" id="nav-coding" onclick="showSection('coding')"><span class="icon">&#128219;</span>AI Coding Review</a>
         <a class="nav-item" id="nav-revenue-integrity" onclick="showSection('revenue-integrity')"><span class="icon">&#128177;</span>Revenue Integrity</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Intelligence</div>
+        <a class="nav-item" id="nav-leakage-detection" onclick="showSection('leakage-detection')"><span class="icon">&#128736;</span>Leakage Detection</a>
+        <a class="nav-item" id="nav-revenue-impact" onclick="showSection('revenue-impact')"><span class="icon">&#128176;</span>Revenue Impact</a>
         <a class="nav-item" id="nav-analytics" onclick="showSection('analytics')"><span class="icon">&#128208;</span>Analytics &amp; Reports</a>
-        <a class="nav-item" id="nav-ai-orchestrator" onclick="showSection('ai-orchestrator')"><span class="icon">&#128169;</span>AI Orchestrator</a>
       </div>
-      <div class="nav-group"><div class="nav-group-title">Governance</div>
+      <div class="nav-group"><div class="nav-group-title">Workforce &amp; AI</div>
+        <a class="nav-item" id="nav-ai-orchestrator" onclick="showSection('ai-orchestrator')"><span class="icon">&#128169;</span>AI Orchestrator</a>
         <a class="nav-item" id="nav-review" onclick="showSection('review')"><span class="icon">&#128214;</span>Human Review Center</a>
-        <a class="nav-item" id="nav-patient" onclick="showSection('patient-finance')"><span class="icon">&#128101;</span>Patient Finance</a>
+        <a class="nav-item" id="nav-claimit" onclick="showSection('claimit')"><span class="icon">&#128204;</span>CLAIM-it Integration</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Patient Finance</div>
+        <a class="nav-item" id="nav-patient-finance" onclick="showSection('patient-finance')"><span class="icon">&#128101;</span>Patient Finance</a>
       </div>
     </nav>
   </aside>
@@ -265,33 +264,57 @@
       <section id="command" class="section active">
         <div class="page-header">
           <h1 class="page-title">Revenue Command Center</h1>
-          <p class="page-sub">Real-time operational overview of the revenue cycle. Metrics calculated from live SQLite records.</p>
+          <p class="page-sub">Four questions: Where do we stand financially? Where is revenue stuck? What needs attention now? What are our AI agents doing?</p>
         </div>
         <div class="section-toolbar">
           <select id="cmd-facility" onchange="cmdRefresh()"><option value="">All Facilities</option></select>
           <select id="cmd-payer" onchange="cmdRefresh()"><option value="">All Payers</option></select>
-          <select id="cmd-stage" onchange="cmdRefresh()"><option value="">All Stages</option></select>
-          <input type="text" id="cmd-search" placeholder="Search&#8230;" oninput="cmdRefresh()" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius)">
           <button class="btn sm" onclick="cmdRefresh()">Refresh</button>
         </div>
-        <div class="metric-strip" id="command-metrics"></div>
-        <div class="grid-2" style="margin-bottom:14px">
-          <div class="card">
-            <div class="card-title">Alerts Requiring Attention</div>
-            <div id="command-alerts" class="empty">Loading&#8230;</div>
+
+        <!-- Q1: Financial Status -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q1. Where do we stand financially?</div>
+            <span class="tag">Live data</span>
           </div>
-          <div class="card">
-            <div class="card-title">Open Review Tasks</div>
-            <div id="command-reviews" class="empty">Loading&#8230;</div>
-          </div>
+          <div class="metric-strip" id="cmd-financial"></div>
         </div>
-        <div class="grid-2">
+
+        <!-- Q2: Stuck Revenue -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q2. Where is revenue stuck?</div>
+            <span class="tag">A/R &amp; leakage</span>
+          </div>
+          <div class="grid-4" id="cmd-stuck"></div>
+        </div>
+
+        <!-- Q3: Required Actions -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q3. What needs attention now?</div>
+            <span class="tag">Review queue</span>
+          </div>
+          <div class="grid-4" id="cmd-actions"></div>
+        </div>
+
+        <!-- Q4: AI Operations -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q4. What are our AI agents doing?</div>
+            <span class="tag">Orchestrator</span>
+          </div>
+          <div class="grid-4" id="cmd-ai-ops"></div>
+        </div>
+
+        <div class="grid-2" style="margin-top:14px">
           <div class="card">
             <div class="card-title">Recent Activity</div>
             <div id="command-activity" class="empty">Loading&#8230;</div>
           </div>
           <div class="card">
-            <div class="card-title">Revenue Cycle Stage Distribution</div>
+            <div class="card-title">Encounter Stage Distribution</div>
             <div id="command-stages" class="empty">Loading&#8230;</div>
           </div>
         </div>
@@ -415,7 +438,53 @@
         </table>
       </section>
 
-      <!-- I. Denial Management -->
+      <!-- I. Billing Module (Phase 2) -->
+      <section id="billing" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Billing Module</h1>
+          <p class="page-sub">Bill lifecycle management: DRAFT &rarr; VALIDATION &rarr; REVIEW &rarr; APPROVED &rarr; CLAIMS_READY &rarr; SUBMITTED. Line items, validation workflow, and bill-to-claim integration.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="bill-filter" onchange="billingList()"><option value="">All Bills</option><option value="draft">Draft</option><option value="validation">Validation</option><option value="review">Review</option><option value="approved">Approved</option><option value="claims_ready">Claims Ready</option><option value="submitted">Submitted</option></select>
+          <button class="btn sm primary" onclick="billCreateModal()">Create Bill</button>
+          <button class="btn sm" onclick="billingList()">Refresh</button>
+        </div>
+        <div class="metric-strip">
+          <div class="metric"><div class="label">Total Bills</div><div class="value" id="bill-total-count">0</div></div>
+          <div class="metric"><div class="label">Total Value</div><div class="value" id="bill-total-value">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Outstanding</div><div class="value" id="bill-outstanding">GHS 0.00</div></div>
+          <div class="metric"><div class="label">In Review</div><div class="value" id="bill-in-review">0</div></div>
+        </div>
+        <table class="data">
+          <thead><tr><th>Bill Number</th><th>Encounter</th><th>Patient</th><th>Total</th><th>Paid</th><th>Outstanding</th><th>Status</th><th>Line Items</th><th>Actions</th></tr></thead>
+          <tbody id="bill-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- II. Revenue Impact (Phase 4/6) -->
+      <section id="revenue-impact" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Revenue Impact Tracking</h1>
+          <p class="page-sub">Revenue impact lifecycle: IDENTIFIED &rarr; ESTIMATED &rarr; ASSIGNED &rarr; UNDER REVIEW &rarr; ACTION TAKEN &rarr; OUTCOME VERIFIED &rarr; CLOSED. Distinguishes estimated vs confirmed recovered/protected revenue.</p>
+        </div>
+        <div class="section-toolbar">
+          <select id="ri-impact-filter" onchange="riImpactList()"><option value="">All Stages</option><option value="IDENTIFIED">Identified</option><option value="ESTIMATED">Estimated</option><option value="ASSIGNED">Assigned</option><option value="UNDER REVIEW">Under Review</option><option value="ACTION TAKEN">Action Taken</option><option value="OUTCOME VERIFIED">Outcome Verified</option><option value="CLOSED">Closed</option></select>
+          <button class="btn sm primary" onclick="riImpactCreateModal()">Create Impact Record</button>
+          <button class="btn sm" onclick="riImpactList()">Refresh</button>
+        </div>
+        <div class="metric-strip">
+          <div class="metric"><div class="label">Total Estimated</div><div class="value" id="ri-impact-estimated">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Confirmed Recovered</div><div class="value" id="ri-impact-recovered">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Confirmed Protected</div><div class="value" id="ri-impact-protected">GHS 0.00</div></div>
+          <div class="metric"><div class="label">Records</div><div class="value" id="ri-impact-count">0</div></div>
+        </div>
+        <table class="data">
+          <thead><tr><th>Impact ID</th><th>Source Type</th><th>Original Issue</th><th>Estimated</th><th>Recovered</th><th>Protected</th><th>Stage</th><th>Outcome</th><th>Actions</th></tr></thead>
+          <tbody id="ri-impact-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- III. Denial Management -->
       <section id="denials" class="section">
         <div class="page-header">
           <h1 class="page-title">Denial Management &amp; Intelligence</h1>
@@ -480,7 +549,7 @@
           <button class="btn sm" onclick="patList()">Refresh</button>
         </div>
         <table class="data">
-          <thead><tr><th>MRN</th><th>Patient</th><th>Encounter</th><th>Expected</div><th>Paid</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>MRN</th><th>Patient</th><th>Encounter</th><th>Expected</th><th>Paid</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="pat-table-body"></tbody>
         </table>
       </section>
@@ -504,6 +573,96 @@
           <thead><tr><th>Category</th><th>Reference</th><th>Amount</th><th>Evidence</th><th>Recommended Action</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="ri-table-body"></tbody>
         </table>
+      </section>
+
+      <!-- Leakage Detection -->
+      <section id="leakage-detection" class="section">
+        <div class="page-header">
+          <h1 class="page-title">Revenue Leakage Detection &amp; Resolution</h1>
+          <p class="page-sub">Identify, review, confirm, and resolve revenue leakage cases. Estimated values are potential&#8212;not confirmed&#8212;until verified through payment.</p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="section-toolbar" style="flex-wrap:wrap">
+          <button class="btn sm primary" onclick="ldShowTab('overview')" id="ld-tab-overview">Overview</button>
+          <button class="btn sm" onclick="ldShowTab('cases')" id="ld-tab-cases">Cases</button>
+          <button class="btn sm" onclick="ldShowTab('analytics')" id="ld-tab-analytics">Analytics</button>
+          <button class="btn sm primary" onclick="ldDetect()" style="margin-left:auto">Run Leakage Detection</button>
+          <button class="btn sm" onclick="ldRefresh()">Refresh</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="ld-tab-overview-content">
+          <div class="metric-strip">
+            <div class="metric"><div class="label">Estimated Exposure</div><div class="value" id="ld-est-exposure">GHS 0.00</div><div class="sub">Potential, not confirmed</div></div>
+            <div class="metric"><div class="label">Confirmed Amount</div><div class="value" id="ld-confirmed-amt">GHS 0.00</div><div class="sub">Confirmed recoverable</div></div>
+            <div class="metric"><div class="label">Verified Recovered</div><div class="value" id="ld-recovered-amt">GHS 0.00</div><div class="sub">Verified through payment</div></div>
+            <div class="metric"><div class="label">Outstanding</div><div class="value" id="ld-outstanding-amt">GHS 0.00</div><div class="sub">Still unresolved</div></div>
+            <div class="metric"><div class="label">Total Cases</div><div class="value" id="ld-total-cases">0</div><div class="sub">All leakage cases</div></div>
+            <div class="metric"><div class="label">Unresolved</div><div class="value" id="ld-unresolved">0</div><div class="sub">Not yet resolved/dismissed</div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Recent Cases</div>
+            <div style="overflow-x:auto">
+              <table class="data">
+                <thead><tr><th>Case ID</th><th>Category</th><th>Reference</th><th>Est. Exposure</th><th>Confirmed</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Actions</th></tr></thead>
+                <tbody id="ld-recent-table-body"></tbody>
+              </table>
+            </div>
+            <div class="notice">Click a case to view details. KPI cards above are clickable to filter the Cases tab.</div>
+          </div>
+        </div>
+
+        <!-- Cases Tab -->
+        <div id="ld-tab-cases-content" style="display:none">
+          <div class="section-toolbar" style="margin-bottom:10px;flex-wrap:wrap">
+            <input type="text" id="ld-search" placeholder="Search case ID, category, reference&#8230;" oninput="ldFilterCases()" style="flex:1;min-width:200px">
+            <select id="ld-filter-category" onchange="ldFilterCases()"><option value="">All Categories</option></select>
+            <select id="ld-filter-status" onchange="ldFilterCases()"><option value="">All Statuses</option></select>
+            <select id="ld-filter-priority" onchange="ldFilterCases()"><option value="">All Priorities</option></select>
+            <select id="ld-filter-assigned" onchange="ldFilterCases()"><option value="">All Assigned</option></select>
+            <button class="btn sm" onclick="ldClearFilters()">Clear Filters</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="data">
+              <thead><tr><th>Case ID</th><th>Category</th><th>Reference</th><th>Patient/Encounter</th><th>Est. Exposure</th><th>Confirmed</th><th>Recovered</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Detected</th><th>Actions</th></tr></thead>
+              <tbody id="ld-cases-table-body"></tbody>
+            </table>
+          </div>
+          <div id="ld-cases-empty" class="empty" style="display:none">No leakage cases match the current filters.</div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="ld-tab-analytics-content" style="display:none">
+          <div class="metric-strip">
+            <div class="metric"><div class="label">Estimated Exposure</div><div class="value" id="lda-est">GHS 0.00</div></div>
+            <div class="metric"><div class="label">Confirmed Amount</div><div class="value" id="lda-confirmed">GHS 0.00</div></div>
+            <div class="metric"><div class="label">Verified Recovered</div><div class="value" id="lda-recovered">GHS 0.00</div></div>
+            <div class="metric"><div class="label">Outstanding</div><div class="value" id="lda-outstanding">GHS 0.00</div></div>
+          </div>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">Cases by Category</div>
+              <div id="lda-by-category"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Cases by Status</div>
+              <div id="lda-by-status"></div>
+            </div>
+          </div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card">
+              <div class="card-title">Estimated Exposure by Category</div>
+              <div id="lda-exposure-by-category"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Cases by Priority</div>
+              <div id="lda-by-priority"></div>
+            </div>
+          </div>
+          <div class="notice" style="margin-top:12px">All analytics are derived from actual persisted leakage case data.</div>
+        </div>
       </section>
 
       <!-- Analytics -->
@@ -540,18 +699,20 @@
       <section id="ai-orchestrator" class="section">
         <div class="page-header">
           <h1 class="page-title">AI Orchestrator</h1>
-          <p class="page-sub">Bidirectional agent-human task assignment with full task lifecycle. Synthetic Ghanaian data: NHIS, private, self-pay; inpatient/outpatient; GHS currency.</p>
+          <p class="page-sub">Bidirectional agent-human task assignment with full task lifecycle. Agent overview, detail workspace, and task lifecycle controls.</p>
         </div>
         <div class="section-toolbar">
           <button class="btn sm primary" onclick="aiOrchestratorRefresh()">Refresh Agent States</button>
           <button class="btn sm" onclick="orchSeedGhanaian()">Seed Ghanaian Demo Data</button>
-          <span class="tag">Interactive agent workspaces</span>
+          <span class="tag">Interagent &amp; human task lifecycle</span>
         </div>
+
+        <!-- Agent Overview Metrics -->
         <div id="ai-orchestrator-metrics" style="margin-top:8px"></div>
 
         <!-- Agent Workspaces -->
         <div class="card" style="margin-top:12px">
-          <div class="card-title">Agent Workspaces</div>
+          <div class="card-title">Agent Overview</div>
           <div id="ai-orchestrator-grid" class="grid-3"></div>
         </div>
 
@@ -776,6 +937,99 @@
   </div>
 </div>
 
+<!-- Bill Create / Edit Modal -->
+<div class="modal" id="modal-bill">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="bill-modal-title">Create Bill</div><button class="modal-close" onclick="hideModal('modal-bill')">&times;</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Encounter ID</label><input type="text" id="bill-enc" placeholder="Encounter ID or number"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Patient ID</label><input type="text" id="bill-patient" placeholder="Patient ID or MRN"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Bill Number</label><input type="text" id="bill-number" placeholder="Auto-generated if empty"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Subtotal (GHS)</label><input type="number" id="bill-subtotal" step="0.01" value="0"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Tax (GHS)</label><input type="number" id="bill-tax" step="0.01" value="0"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Discount (GHS)</label><input type="number" id="bill-discount" step="0.01" value="0"></div>
+      </div>
+      <div id="bill-result" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-bill')">Cancel</button>
+      <button class="btn primary" onclick="billSubmit()">Create Bill</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill Transition Modal -->
+<div class="modal" id="modal-bill-transition">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="bill-transition-title">Bill Status Transition</div><button class="modal-close" onclick="hideModal('modal-bill-transition')">&times;</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:10px">
+        <label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Current Bill</label>
+        <div id="bill-transition-current" style="font-size:11px;font-family:monospace"></div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Transition To</label>
+        <select id="bill-transition-to" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:var(--radius)"></select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Reason / Notes</label>
+        <textarea id="bill-transition-reason" rows="2" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:var(--radius)"></textarea>
+      </div>
+      <div id="bill-transition-result" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-bill-transition')">Cancel</button>
+      <button class="btn primary" onclick="billTransitionSubmit()">Transition</button>
+    </div>
+  </div>
+</div>
+
+<!-- Revenue Impact Create Modal -->
+<div class="modal" id="modal-ri-impact">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title">Create Revenue Impact Record</div><button class="modal-close" onclick="hideModal('modal-ri-impact')">&times;</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Source Finding ID</label><input type="text" id="ri-src-id" placeholder="e.g. leakage case ID"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Source Finding Type</label><input type="text" id="ri-src-type" value="leakage_finding"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Original Issue</label><input type="text" id="ri-issue" placeholder="Description of the issue"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Estimated Amount (GHS)</label><input type="number" id="ri-est-amt" step="0.01" value="0"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Related Claim ID</label><input type="text" id="ri-claim-id" placeholder="Optional"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Related Encounter ID</label><input type="text" id="ri-enc-id" placeholder="Optional"></div>
+        <div><label style="display:block;font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Assigned Owner</label><input type="text" id="ri-owner" placeholder="e.g. Billing Officer"></div>
+      </div>
+      <div id="ri-impact-result" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-ri-impact')">Cancel</button>
+      <button class="btn primary" onclick="riImpactSubmit()">Create Impact</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leakage Case Details Modal -->
+<div class="modal" id="modal-leakage-detail">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="ld-detail-title">Leakage Case Details</div><button class="modal-close" onclick="hideModal('modal-leakage-detail')">&times;</button></div>
+    <div class="modal-body" id="ld-detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-leakage-detail')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leakage Corrective Action Modal -->
+<div class="modal" id="modal-leakage-action">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title" id="ld-action-title">Corrective Action Workspace</div><button class="modal-close" onclick="hideModal('modal-leakage-action')">&times;</button></div>
+    <div class="modal-body" id="ld-action-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('modal-leakage-action')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Demo Mode Panel -->
 <div class="demo-panel" id="demoPanel">
   <div class="demo-panel-header">
@@ -825,11 +1079,14 @@ function showSection(id){
   if(id==='claims') clmList();
   if(id==='claim-prep') clmprepList();
   if(id==='claim-submit') clmsubList();
+  if(id==='billing') billingList();
+  if(id==='revenue-impact') riImpactList();
   if(id==='denials') denList();
   if(id==='ar') arList();
   if(id==='payments') payList();
   if(id==='patient-finance') patList();
   if(id==='revenue-integrity') riList();
+  if(id==='leakage-detection') ldRefresh();
   if(id==='analytics') anRefresh();
   if(id==='ai-orchestrator') aiOrchestratorRefresh();
   if(id==='review') rvList();
@@ -904,9 +1161,11 @@ async function init(){
   await safe(codeList);
   await safe(clmprepList);
   await safe(clmsubList);
+  await safe(billingList);
   await safe(denList);
   await safe(arList);
   await safe(patList);
+  await safe(riImpactList);
 }
 async function codeResolve(decision){
   // handled in codeOpen onclick
@@ -1251,7 +1510,542 @@ async function patList(){
 }
 
 /* ================================================================
-   N. REVENUE INTEGRITY
+   N. BILLING MODULE (Phase 2)
+   ================================================================ */
+async function billingList(){
+  try{
+    const bills = await api('/api/bills');
+    const f = $el('bill-filter') ? $el('bill-filter').value : '';
+    let rows = (bills||[]).filter(b=>!f || b.status===f);
+    let total=0, outstanding=0, inReview=0;
+    let tb='';
+    rows.forEach(b=>{
+      total += parseFloat(b.total||0);
+      outstanding += parseFloat(b.outstanding||0);
+      if(b.status==='review' || b.status==='validation') inReview++;
+      tb+=`<tr onclick="billOpenTransition('${esc(b.id)}','${esc(b.status)}')">
+        <td><span class="mono">${esc(b.bill_number||b.id)}</span></td>
+        <td><span class="mono">${esc(b.encounter_id||'&#8212;')}</span></td>
+        <td>${esc(b.patient_id||'&#8212;')}</td>
+        <td>${fmtMoney(b.total)}</td>
+        <td>${fmtMoney(b.paid)}</td>
+        <td>${fmtMoney(b.outstanding)}</td>
+        <td>${statusBadge(b.status)}</td>
+        <td><button class="btn sm" onclick="event.stopPropagation(); billLineItems('${esc(b.id)}')">Items</button></td>
+        <td>
+          <button class="btn sm" onclick="event.stopPropagation(); billToClaim('${esc(b.id)}','${esc(b.status)}')">To Claim</button>
+        </td>
+      </tr>`;
+    });
+    $el('bill-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No bills found.</td></tr>';
+    $el('bill-total-count').textContent = rows.length;
+    $el('bill-total-value').textContent = fmtMoney(total);
+    $el('bill-outstanding').textContent = fmtMoney(outstanding);
+    $el('bill-in-review').textContent = inReview;
+  }catch(e){ alert('Error loading bills: '+e.message); }
+}
+async function billCreateModal(){
+  $el('bill-enc').value=''; $el('bill-patient').value=''; $el('bill-number').value='';
+  $el('bill-subtotal').value='0'; $el('bill-tax').value='0'; $el('bill-discount').value='0';
+  $el('bill-result').innerHTML='';
+  $el('modal-bill').classList.add('open');
+}
+async function billSubmit(){
+  const enc=$el('bill-enc').value.trim(); const pat=$el('bill-patient').value.trim();
+  const num=$el('bill-number').value.trim();
+  const sub=parseFloat($el('bill-subtotal').value||0);
+  const tax=parseFloat($el('bill-tax').value||0);
+  const disc=parseFloat($el('bill-discount').value||0);
+  if(!enc || !pat){ alert('Encounter ID and Patient ID required'); return; }
+  try{
+    const body={encounter_id:enc, patient_id:pat, subtotal:sub, tax:tax, discount:disc};
+    if(num) body.bill_number=num;
+    const r = await api('/api/bills',{method:'POST',body:body});
+    $el('bill-result').innerHTML = `<div class="status approved">Bill created: ${esc(r.bill_number||r.id)}</div>`;
+    setTimeout(()=>{ hideModal('modal-bill'); billingList(); }, 800);
+  }catch(e){ $el('bill-result').innerHTML = `<div class="status rejected">Failed: ${e.message}</div>`; }
+}
+async function billOpenTransition(billId, currentStatus){
+  $el('bill-transition-current').textContent = billId + ' (current: ' + currentStatus + ')';
+  const sel = $el('bill-transition-to');
+  sel.innerHTML='';
+  const allowed = {
+    'draft':['validation'],
+    'validation':['review','draft'],
+    'review':['approved','draft'],
+    'approved':['claims_ready'],
+    'claims_ready':['submitted'],
+    'submitted':[]
+  }[currentStatus]||[];
+  allowed.forEach(s=>sel.innerHTML+=`<option value="${esc(s)}">${esc(s)}</option>`);
+  $el('bill-transition-reason').value='';
+  $el('bill-transition-result').innerHTML='';
+  $el('modal-bill-transition').classList.add('open');
+  window._billTransitionId = billId;
+}
+async function billTransitionSubmit(){
+  const billId = window._billTransitionId;
+  const toStatus = $el('bill-transition-to').value;
+  const reason = $el('bill-transition-reason').value.trim();
+  if(!toStatus){ alert('Select a target status'); return; }
+  try{
+    await api('/api/bills/'+encodeURIComponent(billId)+'/transition',{method:'POST',body:{to_status:toStatus,actor:'User',reason:reason}});
+    hideModal('modal-bill-transition');
+    billingList();
+  }catch(e){ $el('bill-transition-result').innerHTML = `<div class="status rejected">Failed: ${e.message}</div>`; }
+}
+async function billLineItems(billId){
+  try{
+    const items = await api('/api/bills/'+encodeURIComponent(billId)+'/line-items');
+    let html='<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Line Items for Bill '+esc(billId)+'</div>';
+    html+='<table class="data" style="font-size:10px"><thead><tr><th>Line Code</th><th>Description</th><th>Amount</th><th>Service ID</th></tr></thead><tbody>';
+    (items||[]).forEach(it=>{
+      html+=`<tr><td>${esc(it.line_code||'&#8212;')}</td><td>${esc(it.description||'&#8212;')}</td><td>${fmtMoney(it.amount)}</td><td><span class="mono">${esc(it.service_id||'&#8212;')}</span></td></tr>`;
+    });
+    html+='</tbody></table>';
+    html+='<div style="margin-top:8px"><button class="btn sm" onclick="hideModal(\'modal-bill\')">Close</button></div>';
+    $el('enc-modal-body').innerHTML=html;
+    $el('enc-modal-title').textContent='Bill Line Items';
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Error loading line items: '+e.message); }
+}
+async function billToClaim(billId, currentStatus){
+  if(currentStatus!=='approved' && currentStatus!=='claims_ready'){
+    alert('Bill must be approved or claims_ready to create a claim. Current: '+currentStatus);
+    return;
+  }
+  if(!confirm('Create a claim from this bill?')) return;
+  try{
+    const r = await api('/api/bills/'+encodeURIComponent(billId)+'/to-claim',{method:'POST',body:{actor:'User'}});
+    alert('Claim created: '+esc(r.claim_number||r.id));
+    billingList();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+
+/* ================================================================
+   O. REVENUE IMPACT TRACKING (Phase 4/6)
+   ================================================================ */
+async function riImpactList(){
+  try{
+    const f = $el('ri-impact-filter') ? $el('ri-impact-filter').value : '';
+    const data = await api('/api/revenue-impact');
+    const impacts = (data&&data.impacts)||[];
+    let rows = impacts.filter(i=>!f || i.lifecycle_stage===f);
+    let est=0, rec=0, prot=0;
+    rows.forEach(i=>{ est+=parseFloat(i.initial_estimated_amount||0); rec+=parseFloat(i.confirmed_recovered_amount||0); prot+=parseFloat(i.confirmed_protected_amount||0); });
+    let tb='';
+    rows.forEach(i=>{
+      tb+=`<tr onclick="riImpactOpen('${esc(i.impact_id)}')">
+        <td><span class="mono">${esc(i.impact_id)}</span></td>
+        <td>${esc(i.source_finding_type||'&#8212;')}</td>
+        <td class="small">${esc(i.original_issue||'&#8212;')}</td>
+        <td>${fmtMoney(i.initial_estimated_amount)}</td>
+        <td>${fmtMoney(i.confirmed_recovered_amount)}</td>
+        <td>${fmtMoney(i.confirmed_protected_amount)}</td>
+        <td>${statusBadge(i.lifecycle_stage)}</td>
+        <td>${esc(i.outcome_category||'&#8212;')}</td>
+        <td>
+          <button class="btn sm" onclick="event.stopPropagation(); riImpactStage('${esc(i.impact_id)}','${esc(i.lifecycle_stage)}')">Stage</button>
+          ${i.lifecycle_stage==='OUTCOME VERIFIED'?`<button class="btn sm" onclick="event.stopPropagation(); riImpactClose('${esc(i.impact_id)}')">Close</button>`:''}
+        </td>
+      </tr>`;
+    });
+    $el('ri-impact-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No revenue impact records.</td></tr>';
+    $el('ri-impact-estimated').textContent = fmtMoney(est);
+    $el('ri-impact-recovered').textContent = fmtMoney(rec);
+    $el('ri-impact-protected').textContent = fmtMoney(prot);
+    $el('ri-impact-count').textContent = rows.length;
+  }catch(e){ alert('Error loading revenue impact: '+e.message); }
+}
+async function riImpactCreateModal(){
+  $el('ri-src-id').value=''; $el('ri-src-type').value='leakage_finding'; $el('ri-issue').value='';
+  $el('ri-est-amt').value='0'; $el('ri-claim-id').value=''; $el('ri-enc-id').value=''; $el('ri-owner').value='';
+  $el('ri-impact-result').innerHTML='';
+  $el('modal-ri-impact').classList.add('open');
+}
+async function riImpactSubmit(){
+  const srcId=$el('ri-src-id').value.trim(); const srcType=$el('ri-src-type').value.trim();
+  const issue=$el('ri-issue').value.trim(); const est=parseFloat($el('ri-est-amt').value||0);
+  const claimId=$el('ri-claim-id').value.trim(); const encId=$el('ri-enc-id').value.trim();
+  const owner=$el('ri-owner').value.trim();
+  if(!srcId || !issue){ alert('Source finding ID and issue are required'); return; }
+  try{
+    const body={source_finding_id:srcId, source_finding_type:srcType, original_issue:issue, estimated_amount:est, assigned_owner:owner};
+    if(claimId) body.related_claim_id=claimId;
+    if(encId) body.related_encounter_id=encId;
+    const r = await api('/api/revenue-impact',{method:'POST',body:body});
+    $el('ri-impact-result').innerHTML = `<div class="status approved">Impact created: ${esc(r.impact_id)}</div>`;
+    setTimeout(()=>{ hideModal('modal-ri-impact'); riImpactList(); }, 800);
+  }catch(e){ $el('ri-impact-result').innerHTML = `<div class="status rejected">Failed: ${e.message}</div>`; }
+}
+async function riImpactOpen(impactId){
+  try{
+    const data = await api('/api/revenue-impact');
+    const i = (data.impacts||[]).find(x=>x.impact_id===impactId);
+    if(!i){ alert('Impact record not found'); return; }
+    let html='<table style="margin-bottom:12px">';
+    html+=`<tr><td style="width:160px">Impact ID</td><td>${esc(i.impact_id)}</td></tr>`;
+    html+=`<tr><td>Source Type</td><td>${esc(i.source_finding_type)}</td></tr>`;
+    html+=`<tr><td>Source Finding ID</td><td>${esc(i.source_finding_id)}</td></tr>`;
+    html+=`<tr><td>Original Issue</td><td>${esc(i.original_issue)}</td></tr>`;
+    html+=`<tr><td>Lifecycle Stage</td><td>${statusBadge(i.lifecycle_stage)}</td></tr>`;
+    html+=`<tr><td>Outcome Category</td><td>${esc(i.outcome_category||'&#8212;')}</td></tr>`;
+    html+=`<tr><td>Estimated Amount</td><td>${fmtMoney(i.initial_estimated_amount)}</td></tr>`;
+    html+=`<tr><td>Confirmed Recovered</td><td>${fmtMoney(i.confirmed_recovered_amount)}</td></tr>`;
+    html+=`<tr><td>Confirmed Protected</td><td>${fmtMoney(i.confirmed_protected_amount)}</td></tr>`;
+    html+=`<tr><td>Assigned Owner</td><td>${esc(i.assigned_owner||'&#8212;')}</td></tr>`;
+    html+=`<tr><td>Verification Status</td><td>${esc(i.human_verification_status||'&#8212;')}</td></tr>`;
+    html+=`<tr><td>Related Claim</td><td>${esc(i.related_claim_id||'&#8212;')}</td></tr>`;
+    html+=`<tr><td>Related Encounter</td><td>${esc(i.related_encounter_id||'&#8212;')}</td></tr>`;
+    html+=`</table>`;
+    $el('enc-modal-title').textContent='Revenue Impact: '+esc(impactId);
+    $el('enc-modal-body').innerHTML=html;
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Error loading impact: '+e.message); }
+}
+async function riImpactStage(impactId, currentStage){
+  const stages = ['IDENTIFIED','ESTIMATED','ASSIGNED','UNDER REVIEW','ACTION TAKEN','OUTCOME VERIFIED','CLOSED'];
+  const curIdx = stages.indexOf(currentStage);
+  let next = '';
+  if(curIdx>=0 && curIdx<stages.length-1) next = stages[curIdx+1];
+  if(!next){ alert('Already at final stage'); return; }
+  if(!confirm('Transition to '+next+'?')) return;
+  try{
+    await api('/api/revenue-impact/'+encodeURIComponent(impactId)+'/stage',{method:'POST',body:{stage:next,actor:'User'}});
+    riImpactList();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+async function riImpactClose(impactId){
+  if(!confirm('Close this impact record?')) return;
+  try{
+    await api('/api/revenue-impact/'+encodeURIComponent(impactId)+'/close',{method:'POST',body:{actor:'User'}});
+    riImpactList();
+  }catch(e){ alert('Failed: '+e.message); }
+}
+
+/* ================================================================
+   LEAKAGE DETECTION & RESOLUTION
+   ================================================================ */
+let _ldCasesCache = [];
+
+function ldShowTab(tab){
+  ['overview','cases','analytics'].forEach(t=>{
+    const btn=$el('ld-tab-'+t);
+    const content=$el('ld-tab-'+t+'-content');
+    if(btn){ btn.classList.toggle('primary', t===tab); btn.classList.toggle('sm', t===tab); }
+    if(content) content.style.display = t===tab?'block':'none';
+  });
+  if(tab==='cases') ldLoadCases();
+  if(tab==='analytics') ldLoadAnalytics();
+}
+
+async function ldRefresh(){
+  ldShowTab('overview');
+  await ldLoadOverview();
+}
+
+async function ldDetect(){
+  try{
+    const btn=$el('ld-tab-overview');
+    if(btn) btn.disabled=true;
+    await api('/api/leakage');
+    ldRefresh();
+    alert('Leakage detection completed. New cases created.');
+  }catch(e){ alert('Detection failed: '+e.message); }
+  finally{ if(btn) btn.disabled=false; }
+}
+
+async function ldLoadOverview(){
+  try{
+    const an = await api('/api/leakage/analytics');
+    $el('ld-est-exposure').textContent = fmtMoney(an.estimated_exposure||0);
+    $el('ld-confirmed-amt').textContent = fmtMoney(an.confirmed_amount||0);
+    $el('ld-recovered-amt').textContent = fmtMoney(an.verified_recovered_amount||0);
+    $el('ld-outstanding-amt').textContent = fmtMoney(an.outstanding_amount||0);
+    $el('ld-total-cases').textContent = an.total_cases||0;
+    $el('ld-unresolved').textContent = (an.by_status||{})['DETECTED']||0;
+    const cases = await api('/api/leakage/cases');
+    const recent = (cases||[]).slice(0,10);
+    let tb='';
+    recent.forEach(c=>{
+      tb+=`<tr style="cursor:pointer" onclick="ldOpenCase('${esc(c.id)}')">
+        <td class="mono">${esc(c.id.slice(0,12))}</td>
+        <td><span class="tag">${esc(c.category||'')}</span></td>
+        <td class="mono small">${esc(c.entity_type||'')} ${esc((c.claim_id||c.encounter_id||c.entity_id||'').slice(0,12))}</td>
+        <td>${fmtMoney(c.estimated_exposure)}</td>
+        <td>${fmtMoney(c.confirmed_amount)}</td>
+        <td>${c.priority||'medium'}</td>
+        <td>${statusBadge(c.status||'DETECTED')}</td>
+        <td>${esc(c.assigned_user||'&#8212;')}</td>
+        <td><button class="btn sm" onclick="event.stopPropagation();ldOpenCase('${esc(c.id)}')">Details</button></td>
+      </tr>`;
+    });
+    $el('ld-recent-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No leakage cases. Run detection.</td></tr>';
+  }catch(e){ /* silent */ }
+}
+
+async function ldLoadCases(){
+  try{
+    const cases = await api('/api/leakage/cases');
+    _ldCasesCache = cases||[];
+    ldRenderCases(_ldCasesCache);
+    ldPopulateFilters(_ldCasesCache);
+  }catch(e){ alert('Error loading cases: '+e.message); }
+}
+
+function ldPopulateFilters(cases){
+  const cats = [...new Set(cases.map(c=>c.category))].sort();
+  const sts = [...new Set(cases.map(c=>c.status))].sort();
+  const pri = [...new Set(cases.map(c=>c.priority))].sort();
+  const asg = [...new Set(cases.map(c=>c.assigned_user).filter(Boolean))].sort();
+  const catSel = $el('ld-filter-category');
+  const stSel = $el('ld-filter-status');
+  const priSel = $el('ld-filter-priority');
+  const asgSel = $el('ld-filter-assigned');
+  if(catSel && catSel.options.length<=1) cats.forEach(c=>catSel.add(new Option(c,c)));
+  if(stSel && stSel.options.length<=1) sts.forEach(s=>stSel.add(new Option(s,s)));
+  if(priSel && priSel.options.length<=1) pri.forEach(p=>priSel.add(new Option(p,p)));
+  if(asgSel && asgSel.options.length<=1) asg.forEach(a=>asgSel.add(new Option(a,a)));
+}
+
+function ldFilterCases(){
+  const search = ($el('ld-search')||{}).value || '';
+  const cat = ($el('ld-filter-category')||{}).value || '';
+  const st = ($el('ld-filter-status')||{}).value || '';
+  const pri = ($el('ld-filter-priority')||{}).value || '';
+  const asg = ($el('ld-filter-assigned')||{}).value || '';
+  const filtered = _ldCasesCache.filter(c=>{
+    if(search && !(c.id||'').toLowerCase().includes(search.toLowerCase()) &&
+       !(c.category||'').toLowerCase().includes(search.toLowerCase()) &&
+       !(c.entity_id||'').toLowerCase().includes(search.toLowerCase()) &&
+       !(c.encounter_id||'').toLowerCase().includes(search.toLowerCase()) &&
+       !(c.claim_id||'').toLowerCase().includes(search.toLowerCase())) return false;
+    if(cat && c.category!==cat) return false;
+    if(st && c.status!==st) return false;
+    if(pri && c.priority!==pri) return false;
+    if(asg && c.assigned_user!==asg) return false;
+    return true;
+  });
+  ldRenderCases(filtered);
+}
+
+function ldClearFilters(){
+  ['ld-search','ld-filter-category','ld-filter-status','ld-filter-priority','ld-filter-assigned'].forEach(id=>{
+    const el=$el(id); if(el) el.value='';
+  });
+  ldRenderCases(_ldCasesCache);
+}
+
+function ldRenderCases(cases){
+  let tb='';
+  cases.forEach(c=>{
+    const ref = c.claim_id||c.encounter_id||c.entity_id||'';
+    const pat = c.encounter_id || c.patient_id || '';
+    tb+=`<tr style="cursor:pointer" onclick="ldOpenCase('${esc(c.id)}')">
+      <td class="mono small">${esc((c.id||'').slice(0,12))}</td>
+      <td><span class="tag">${esc(c.category||'')}</span></td>
+      <td class="mono small">${esc((c.entity_type||'')+' '+ref).slice(0,24)}</td>
+      <td class="small">${esc(pat)}</td>
+      <td>${fmtMoney(c.estimated_exposure)}</td>
+      <td>${fmtMoney(c.confirmed_amount)}</td>
+      <td>${fmtMoney(c.verified_recovered_amount)}</td>
+      <td><span class="tag">${esc(c.priority||'medium')}</span></td>
+      <td>${statusBadge(c.status||'DETECTED')}</td>
+      <td class="small">${esc(c.assigned_user||'&#8212;')}</td>
+      <td class="small mono">${esc((c.created_at||'').slice(0,10))}</td>
+      <td>
+        <button class="btn sm" onclick="event.stopPropagation();ldOpenCase('${esc(c.id)}')">View</button>
+        <button class="btn sm primary" onclick="event.stopPropagation();ldOpenAction('${esc(c.id)}')">Action</button>
+      </td>
+    </tr>`;
+  });
+  $el('ld-cases-table-body').innerHTML = tb || '';
+  $el('ld-cases-empty').style.display = cases.length ? 'none':'block';
+}
+
+async function ldOpenCase(caseId){
+  try{
+    const c = await api('/api/leakage/cases/'+encodeURIComponent(caseId));
+    if(!c||c.error){ alert('Case not found'); return; }
+    $el('ld-detail-title').textContent = 'Case: ' + (c.category||'') + ' — ' + (c.id||'').slice(0,12);
+    const html = ldRenderCaseDetail(c);
+    $el('ld-detail-body').innerHTML = html;
+    $el('modal-leakage-detail').classList.add('open');
+  }catch(e){ alert('Error: '+e.message); }
+}
+
+function ldRenderCaseDetail(c){
+  let h = '';
+  h += '<div class="grid-2">';
+  h += '<div>';
+  h += '<p><strong>Category:</strong> '+esc(c.category||'&#8212;')+'</p>';
+  h += '<p><strong>Description:</strong> '+esc(c.description||'&#8212;')+'</p>';
+  h += '<p><strong>Detection Source:</strong> '+esc(c.detection_source||'&#8212;')+'</p>';
+  h += '<p><strong>Detection Rule:</strong> <code class="mono small">'+esc(c.detection_rule||'&#8212;')+'</code></p>';
+  h += '</div>';
+  h += '<div>';
+  h += '<p><strong>Estimated Exposure:</strong> '+fmtMoney(c.estimated_exposure)+'</p>';
+  h += '<p><strong>Confirmed Amount:</strong> '+fmtMoney(c.confirmed_amount)+'</p>';
+  h += '<p><strong>Verified Recovered:</strong> '+fmtMoney(c.verified_recovered_amount)+'</p>';
+  h += '<p><strong>Priority:</strong> <span class="tag">'+esc(c.priority||'medium')+'</span></p>';
+  h += '<p><strong>Status:</strong> '+statusBadge(c.status||'DETECTED')+'</p>';
+  h += '</div>';
+  h += '</div>';
+  h += '<hr class="hr">';
+  h += '<p><strong>Evidence:</strong></p><p class="small">'+esc(c.supporting_evidence||c.evidence||'&#8212;')+'</p>';
+  h += '<p><strong>Recommended Action:</strong></p><p class="small">'+esc(c.recommended_action||'&#8212;')+'</p>';
+  h += '<hr class="hr">';
+  h += '<div class="grid-2">';
+  h += '<div><p><strong>Entity Type:</strong> '+esc(c.entity_type||'&#8212;')+'</p><p><strong>Entity ID:</strong> <span class="mono small">'+esc(c.entity_id||'&#8212;')+'</span></p></div>';
+  h += '<div><p><strong>Encounter:</strong> <span class="mono small">'+esc(c.encounter_id||'&#8212;')+'</span></p><p><strong>Claim:</strong> <span class="mono small">'+esc(c.claim_id||'&#8212;')+'</span></p></div>';
+  h += '</div>';
+  h += '<hr class="hr">';
+  h += '<p><strong>Assigned To:</strong> '+esc(c.assigned_user||'Unassigned')+'</p>';
+  h += '<p><strong>Detected:</strong> '+esc(c.created_at||'&#8212;')+'</p>';
+  h += '<p><strong>Last Updated:</strong> '+esc(c.updated_at||'&#8212;')+'</p>';
+  if(c.resolved_at) h += '<p><strong>Resolved:</strong> '+esc(c.resolved_at)+'</p>';
+  if(c.resolution_notes) h += '<p><strong>Resolution Notes:</strong> <pre class="small" style="white-space:pre-wrap;background:#f7f9fb;padding:6px;border-radius:3px">'+esc(c.resolution_notes)+'</pre>';
+  if(c.false_positive_reason) h += '<p><strong>False Positive Reason:</strong> '+esc(c.false_positive_reason)+'</p>';
+  return h;
+}
+
+function ldOpenAction(caseId){
+  $el('ld-action-title').textContent = 'Corrective Action: ' + (caseId||'').slice(0,12);
+  const c = _ldCasesCache.find(x=>x.id===caseId);
+  if(!c){ $el('ld-action-body').innerHTML = '<p class="empty">Case data not loaded.</p>'; $el('modal-leakage-action').classList.add('open'); return; }
+  const st = c.status||'DETECTED';
+  const can = {
+    assign: true,
+    prioritize: true,
+    confirm: ['DETECTED','UNDER_REVIEW'].includes(st),
+    require_action: st==='CONFIRMED',
+    dismiss: ['DETECTED','UNDER_REVIEW','CONFIRMED'].includes(st),
+    false_positive: ['DETECTED','UNDER_REVIEW','CONFIRMED'].includes(st),
+    start_action: st==='ACTION_REQUIRED',
+    resolve: st==='IN_PROGRESS',
+    reopen: st==='RESOLVED',
+    notes: true,
+    confirmed_amt: ['CONFIRMED','ACTION_REQUIRED','IN_PROGRESS'].includes(st),
+    recovered_amt: ['IN_PROGRESS','RESOLVED'].includes(st),
+  };
+  let h = '';
+  h += '<p><strong>Category:</strong> '+esc(c.category||'')+' &mdash; <strong>Priority:</strong> '+esc(c.priority||'')+' &mdash; <strong>Status:</strong> '+statusBadge(st)+'</p>';
+  h += '<p><strong>Estimated:</strong> '+fmtMoney(c.estimated_exposure)+' &mdash; <strong>Confirmed:</strong> '+fmtMoney(c.confirmed_amount)+' &mdash; <strong>Recovered:</strong> '+fmtMoney(c.verified_recovered_amount)+'</p>';
+  h += '<hr class="hr">';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  if(can.assign) h += `<button class="btn sm" onclick="ldAssignCase('${esc(caseId)}')">Assign</button>`;
+  if(can.prioritize) h += `<button class="btn sm" onclick="ldPrioritizeCase('${esc(caseId)}')">Change Priority</button>`;
+  if(can.confirm) h += `<button class="btn sm primary" onclick="ldConfirmCase('${esc(caseId)}')">Confirm Issue</button>`;
+  if(can.require_action) h += `<button class="btn sm primary" onclick="ldRequireAction('${esc(caseId)}')">Require Action</button>`;
+  if(can.dismiss) h += `<button class="btn sm" onclick="ldDismissCase('${esc(caseId)}')">Dismiss</button>`;
+  if(can.false_positive) h += `<button class="btn sm" onclick="ldFalsePositive('${esc(caseId)}')">False Positive</button>`;
+  if(can.start_action) h += `<button class="btn sm primary" onclick="ldStartAction('${esc(caseId)}')">Start Corrective Action</button>`;
+  if(can.resolve) h += `<button class="btn sm primary" onclick="ldResolveCase('${esc(caseId)}')">Resolve</button>`;
+  if(can.reopen) h += `<button class="btn sm" onclick="ldReopenCase('${esc(caseId)}')">Reopen</button>`;
+  if(can.notes) h += `<button class="btn sm" onclick="ldAddNotes('${esc(caseId)}')">Add Notes</button>`;
+  if(can.confirmed_amt) h += `<button class="btn sm" onclick="ldRecordConfirmed('${esc(caseId)}')">Record Confirmed Amount</button>`;
+  if(can.recovered_amt) h += `<button class="btn sm" onclick="ldRecordRecovered('${esc(caseId)}')">Record Recovered Amount</button>`;
+  h += '</div>';
+  h += '<hr class="hr">';
+  h += '<div class="card"><div class="card-title">Case Context</div>';
+  h += '<p class="small">Evidence: '+esc(c.supporting_evidence||c.evidence||'&#8212;')+'</p>';
+  h += '<p class="small">Recommended: '+esc(c.recommended_action||'&#8212;')+'</p>';
+  h += '<p class="small">Entity: '+esc(c.entity_type||'')+' <span class="mono">'+esc(c.entity_id||'')+'</span></p>';
+  h += '</div>';
+  $el('ld-action-body').innerHTML = h;
+  $el('modal-leakage-action').classList.add('open');
+}
+
+async function ldAssignCase(caseId){
+  const user = prompt('Assign to staff member (username):','Unassigned');
+  if(user===null) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/assign',{method:'POST',body:{assigned_user:user}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldPrioritizeCase(caseId){
+  const pri = prompt('Set priority (low/medium/high/critical):','high');
+  if(!pri) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/prioritize',{method:'POST',body:{priority:pri}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldConfirmCase(caseId){
+  if(!confirm('Confirm this case as a real leakage issue?')) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/confirm',{method:'POST',body:{}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldRequireAction(caseId){
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/require-action',{method:'POST',body:{}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldDismissCase(caseId){
+  if(!confirm('Dismiss this case without action?')) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/dismiss',{method:'POST',body:{}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldFalsePositive(caseId){
+  const reason = prompt('Reason for marking as false positive:');
+  if(!reason) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/false-positive',{method:'POST',body:{false_positive_reason:reason}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldStartAction(caseId){
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/start-action',{method:'POST',body:{}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldResolveCase(caseId){
+  const notes = prompt('Resolution notes (optional):');
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/resolve',{method:'POST',body:{resolution_notes:notes||''}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldReopenCase(caseId){
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/reopen',{method:'POST',body:{}}); hideModal('modal-leakage-action'); ldRefresh(); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldAddNotes(caseId){
+  const notes = prompt('Add notes:');
+  if(!notes) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/notes',{method:'POST',body:{notes:notes}}); alert('Notes added.'); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldRecordConfirmed(caseId){
+  const amt = prompt('Confirmed amount (GHS):');
+  if(!amt) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/confirmed-amount',{method:'POST',body:{amount:parseFloat(amt)}}); alert('Confirmed amount recorded.'); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+async function ldRecordRecovered(caseId){
+  const amt = prompt('Recovered amount (GHS):');
+  if(!amt) return;
+  try{ await api('/api/leakage/cases/'+encodeURIComponent(caseId)+'/recovered-amount',{method:'POST',body:{amount:parseFloat(amt)}}); alert('Recovered amount recorded.'); }
+  catch(e){ alert('Failed: '+e.message); }
+}
+
+async function ldLoadAnalytics(){
+  try{
+    const an = await api('/api/leakage/analytics');
+    $el('lda-est').textContent = fmtMoney(an.estimated_exposure||0);
+    $el('lda-confirmed').textContent = fmtMoney(an.confirmed_amount||0);
+    $el('lda-recovered').textContent = fmtMoney(an.verified_recovered_amount||0);
+    $el('lda-outstanding').textContent = fmtMoney(an.outstanding_amount||0);
+    let h1='', h2='', h3='', h4='';
+    const byCat = an.by_category||{};
+    Object.entries(byCat).forEach(([k,v])=>{
+      h1 += '<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">'+esc(k)+'</span> <span style="float:right">'+v.count+'</span></div>';
+      h3 += '<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">'+esc(k)+'</span> <span style="float:right">'+fmtMoney(v.estimated_exposure)+'</span></div>';
+    });
+    const bySt = an.by_status||{};
+    Object.entries(bySt).forEach(([k,v])=>{ h2 += '<div style="padding:4px 0;border-bottom:1px solid #e3e9ee">'+statusBadge(k)+' <span style="float:right">'+v+'</span></div>'; });
+    const byPri = an.by_priority||{};
+    Object.entries(byPri).forEach(([k,v])=>{ h4 += '<div style="padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">'+esc(k)+'</span> <span style="float:right">'+v+'</span></div>'; });
+    $el('lda-by-category').innerHTML = h1||'<div class="empty">No data.</div>';
+    $el('lda-by-status').innerHTML = h2||'<div class="empty">No data.</div>';
+    $el('lda-exposure-by-category').innerHTML = h3||'<div class="empty">No data.</div>';
+    $el('lda-by-priority').innerHTML = h4||'<div class="empty">No data.</div>';
+  }catch(e){ alert('Analytics error: '+e.message); }
+}
+
+/* ================================================================
+   P. REVENUE INTEGRITY
    ================================================================ */
 async function riList(){
   try{
@@ -1662,26 +2456,88 @@ function demoGotoScreen(screen){
    A. COMMAND CENTER
    ================================================================ */
 async function cmdRefresh(){
-  // Panel 1: KPI Metrics
+  // Q1: Financial Status
   try{
     const ov = await api('/api/dashboard/overview');
     const k = ov.kpis||{};
+    const totalCharges = parseFloat(k.total_charges||0);
+    const totalCollected = parseFloat(k.total_collected||0);
+    const collectionRate = totalCharges>0 ? Math.round((totalCollected/totalCharges)*100) : 0;
     const rows=[
-      ['Total Charges', fmtMoney(k.total_charges)],
-      ['Total Collected', fmtMoney(k.total_collected)],
-      ['Outstanding', fmtMoney(k.total_outstanding)],
+      ['Total Charges', fmtMoney(totalCharges)],
+      ['Total Collected', fmtMoney(totalCollected)],
+      ['Outstanding', fmtMoney(parseFloat(k.total_outstanding||0))],
+      ['Collection Rate', collectionRate+'%'],
       ['Claims Submitted', k.claims_submitted],
       ['Claims Pending', k.claims_pending],
-      ['Claims Rejected', k.claims_rejected],
-      ['Claims Requiring Attention', k.claims_requiring_attention],
       ['Unreconciled Payments', fmtMoney(k.unreconciled_payments)],
-      ['Open Exceptions', k.open_exceptions],
-      ['Pending Reviews', k.pending_reviews],
     ];
-    $el('command-metrics').innerHTML=rows.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
-  }catch(e){ $el('command-metrics').innerHTML = `<div class="error">Error loading metrics: ${esc(e.message)}</div>`; }
+    $el('cmd-financial').innerHTML=rows.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-financial').innerHTML = `<div class="error">Error loading financials: ${esc(e.message)}</div>`; }
 
-  // Panel 2: Recent Activity
+  // Q2: Stuck Revenue
+  try{
+    const [claims, dens, lk] = await Promise.all([
+      api('/api/claims').catch(()=>[]),
+      api('/api/denials').catch(()=>[]),
+      api('/api/leakage').catch(()=>({items:[]}))
+    ]);
+    const arOutstanding = (claims||[]).reduce((s,c)=>s+(parseFloat(c.approved_amount||0)-parseFloat(c.paid_amount||0)),0);
+    const deniedAmount = (dens||[]).reduce((s,d)=>s+parseFloat(d.amount||0),0);
+    const leakage = (lk&&lk.items)||[];
+    const leakageTotal = leakage.reduce((s,i)=>s+parseFloat(i.amount||0),0);
+    const unreconciled = parseFloat(k&&k.unreconciled_payments||0);
+    const stuck = [
+      ['A/R Outstanding', fmtMoney(arOutstanding)],
+      ['Denied Amount', fmtMoney(deniedAmount)],
+      ['Unreconciled Payments', fmtMoney(unreconciled)],
+      ['Potential Leakage', fmtMoney(leakageTotal)],
+    ];
+    $el('cmd-stuck').innerHTML=stuck.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-stuck').innerHTML = `<div class="error">Error loading stuck revenue: ${esc(e.message)}</div>`; }
+
+  // Q3: Required Actions
+  try{
+    const [iss, docs, codes, recs] = await Promise.all([
+      api('/api/dashboard/issues').catch(()=>({exceptions:[],review_tasks:[]})),
+      api('/api/documentation-reviews').catch(()=>[]),
+      api('/api/coding-suggestions').catch(()=>[]),
+      api('/api/reconciliations').catch(()=>[])
+    ]);
+    const openExceptions = (iss.exceptions||[]).filter(e=>e.status==='open'||e.status==='pending').length;
+    const pendingReviews = (iss.review_tasks||[]).filter(r=>r.status==='pending'||r.status==='open').length;
+    const pendingDocs = (docs||[]).filter(d=>d.status==='pending').length;
+    const pendingCodes = (codes||[]).filter(c=>c.status==='pending_review').length;
+    const pendingRecs = (recs||[]).filter(r=>r.review_decision==='pending').length;
+    const actions = [
+      ['Open Exceptions', openExceptions],
+      ['Pending Reviews', pendingReviews],
+      ['Documentation Reviews', pendingDocs],
+      ['Coding Reviews', pendingCodes],
+      ['Reconciliations Pending', pendingRecs],
+    ];
+    $el('cmd-actions').innerHTML=actions.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-actions').innerHTML = `<div class="error">Error loading actions: ${esc(e.message)}</div>`; }
+
+  // Q4: AI Operations
+  try{
+    const [st, m] = await Promise.all([
+      api('/api/orchestrator/state').catch(()=>({agents:[]})),
+      api('/api/orchestrator/metrics').catch(()=>({}))
+    ]);
+    const agents = (st&&st.agents)||[];
+    const activeAgents = agents.filter(a=>a.status&&a.status.toLowerCase()!=='idle').length;
+    const aiOps = [
+      ['Total Agents', agents.length],
+      ['Active Agents', activeAgents],
+      ['Pending Tasks', m.pending||0],
+      ['Completed Tasks', m.completed||0],
+      ['Escalated', m.escalated||0],
+    ];
+    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-ai-ops').innerHTML = `<div class="error">Error loading AI ops: ${esc(e.message)}</div>`; }
+
+  // Recent Activity
   try{
     const act = await api('/api/dashboard/activity');
     let ah='';
@@ -1691,19 +2547,7 @@ async function cmdRefresh(){
     $el('command-activity').innerHTML = ah || '<div class="empty">No recent activity.</div>';
   }catch(e){ $el('command-activity').innerHTML = `<div class="error">Error loading activity: ${esc(e.message)}</div>`; }
 
-  // Panel 3: Issues & Alerts
-  try{
-    const iss = await api('/api/dashboard/issues');
-    let ih='';
-    [...(iss.exceptions||[]), ...(iss.review_tasks||[])].slice(0,8).forEach(r=>{
-      const sev = r.severity||'low';
-      ih+=`<div class="alert-item ${sev}"><div class="alert-title">${esc(r.title||r.task_type||'Review item')}</div><div class="alert-meta">${esc(r.explanation||r.context||'')}</div><div class="alert-meta">${statusBadge(r.status||'pending')} &bull; ${esc(r.detecting_agent||r.assigned_to||'')}</div></div>`;
-    });
-    $el('command-alerts').innerHTML = ih || '<div class="empty">No priority issues.</div>';
-    $el('command-reviews').innerHTML = ih || '<div class="empty">No review tasks.</div>';
-  }catch(e){ $el('command-alerts').innerHTML = `<div class="error">Error loading issues: ${esc(e.message)}</div>`; $el('command-reviews').innerHTML = `<div class="error">Error loading reviews: ${esc(e.message)}</div>`; }
-
-  // Panel 4: Encounter Stage Distribution
+  // Encounter Stage Distribution
   try{
     const encs = await api('/api/encounters');
     const stages={};

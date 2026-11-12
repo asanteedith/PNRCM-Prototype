@@ -209,37 +209,33 @@
       <span class="demo-badge">SYNTHETIC DATA</span>
     </div>
     <nav>
-      <div class="nav-group"><div class="nav-group-title">Command</div>
+      <div class="nav-group"><div class="nav-group-title">Revenue Operations</div>
         <a class="nav-item active" id="nav-command" onclick="showSection('command')"><span class="icon">&#9881;</span>Command Center</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Patient Access</div>
+        <a class="nav-item" id="nav-encounters" onclick="showSection('encounters')"><span class="icon">&#128197;</span>Encounter Workspace</a>
         <a class="nav-item" id="nav-registration" onclick="showSection('registration')"><span class="icon">&#128100;</span>Registration &amp; Eligibility</a>
         <a class="nav-item" id="nav-authorization" onclick="showSection('authorization')"><span class="icon">&#128205;</span>Prior Authorization</a>
       </div>
-      <div class="nav-group"><div class="nav-group-title">Clinical &amp; Charges</div>
-        <a class="nav-item" id="nav-encounters" onclick="showSection('encounters')"><span class="icon">&#128197;</span>Encounter Workspace</a>
-        <a class="nav-item" id="nav-documentation" onclick="showSection('documentation')"><span class="icon">&#128221;</span>Documentation &amp; Charges</a>
-        <a class="nav-item" id="nav-coding" onclick="showSection('coding')"><span class="icon">&#128219;</span>AI Coding Review</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Claims</div>
+      <div class="nav-group"><div class="nav-group-title">Claims &amp; Collections</div>
         <a class="nav-item" id="nav-claims" onclick="showSection('claims')"><span class="icon">&#128176;</span>Claims Management</a>
         <a class="nav-item" id="nav-claim-prep" onclick="showSection('claim-prep')"><span class="icon">&#128218;</span>Claim Preparation</a>
         <a class="nav-item" id="nav-claim-submit" onclick="showSection('claim-submit')"><span class="icon">&#128226;</span>Submission &amp; Payer</a>
-        <a class="nav-item" id="nav-claimit" onclick="showSection('claimit')"><span class="icon">&#128204;</span>CLAIM-it Integration</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Revenue Integrity</div>
         <a class="nav-item" id="nav-denials" onclick="showSection('denials')"><span class="icon">&#128169;</span>Denial Management</a>
         <a class="nav-item" id="nav-ar" onclick="showSection('ar')"><span class="icon">&#128177;</span>AR &amp; Follow-Up</a>
         <a class="nav-item" id="nav-payments" onclick="showSection('payments')"><span class="icon">&#128179;</span>Payments &amp; Reconciliation</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Revenue Intelligence</div>
+        <a class="nav-item" id="nav-documentation" onclick="showSection('documentation')"><span class="icon">&#128221;</span>Documentation &amp; Charges</a>
+        <a class="nav-item" id="nav-coding" onclick="showSection('coding')"><span class="icon">&#128219;</span>AI Coding Review</a>
         <a class="nav-item" id="nav-revenue-integrity" onclick="showSection('revenue-integrity')"><span class="icon">&#128177;</span>Revenue Integrity</a>
-      </div>
-      <div class="nav-group"><div class="nav-group-title">Intelligence</div>
         <a class="nav-item" id="nav-analytics" onclick="showSection('analytics')"><span class="icon">&#128208;</span>Analytics &amp; Reports</a>
-        <a class="nav-item" id="nav-ai-orchestrator" onclick="showSection('ai-orchestrator')"><span class="icon">&#128169;</span>AI Orchestrator</a>
       </div>
-      <div class="nav-group"><div class="nav-group-title">Governance</div>
+      <div class="nav-group"><div class="nav-group-title">Workforce &amp; AI</div>
+        <a class="nav-item" id="nav-ai-orchestrator" onclick="showSection('ai-orchestrator')"><span class="icon">&#128169;</span>AI Orchestrator</a>
         <a class="nav-item" id="nav-review" onclick="showSection('review')"><span class="icon">&#128214;</span>Human Review Center</a>
-        <a class="nav-item" id="nav-patient" onclick="showSection('patient-finance')"><span class="icon">&#128101;</span>Patient Finance</a>
+        <a class="nav-item" id="nav-claimit" onclick="showSection('claimit')"><span class="icon">&#128204;</span>CLAIM-it Integration</a>
+      </div>
+      <div class="nav-group"><div class="nav-group-title">Patient Finance</div>
+        <a class="nav-item" id="nav-patient-finance" onclick="showSection('patient-finance')"><span class="icon">&#128101;</span>Patient Finance</a>
       </div>
     </nav>
   </aside>
@@ -265,33 +261,57 @@
       <section id="command" class="section active">
         <div class="page-header">
           <h1 class="page-title">Revenue Command Center</h1>
-          <p class="page-sub">Real-time operational overview of the revenue cycle. Metrics calculated from live SQLite records.</p>
+          <p class="page-sub">Four questions: Where do we stand financially? Where is revenue stuck? What needs attention now? What are our AI agents doing?</p>
         </div>
         <div class="section-toolbar">
           <select id="cmd-facility" onchange="cmdRefresh()"><option value="">All Facilities</option></select>
           <select id="cmd-payer" onchange="cmdRefresh()"><option value="">All Payers</option></select>
-          <select id="cmd-stage" onchange="cmdRefresh()"><option value="">All Stages</option></select>
-          <input type="text" id="cmd-search" placeholder="Search&#8230;" oninput="cmdRefresh()" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius)">
           <button class="btn sm" onclick="cmdRefresh()">Refresh</button>
         </div>
-        <div class="metric-strip" id="command-metrics"></div>
-        <div class="grid-2" style="margin-bottom:14px">
-          <div class="card">
-            <div class="card-title">Alerts Requiring Attention</div>
-            <div id="command-alerts" class="empty">Loading&#8230;</div>
+
+        <!-- Q1: Financial Status -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q1. Where do we stand financially?</div>
+            <span class="tag">Live data</span>
           </div>
-          <div class="card">
-            <div class="card-title">Open Review Tasks</div>
-            <div id="command-reviews" class="empty">Loading&#8230;</div>
-          </div>
+          <div class="metric-strip" id="cmd-financial"></div>
         </div>
-        <div class="grid-2">
+
+        <!-- Q2: Stuck Revenue -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q2. Where is revenue stuck?</div>
+            <span class="tag">A/R &amp; leakage</span>
+          </div>
+          <div class="grid-4" id="cmd-stuck"></div>
+        </div>
+
+        <!-- Q3: Required Actions -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q3. What needs attention now?</div>
+            <span class="tag">Review queue</span>
+          </div>
+          <div class="grid-4" id="cmd-actions"></div>
+        </div>
+
+        <!-- Q4: AI Operations -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">Q4. What are our AI agents doing?</div>
+            <span class="tag">Orchestrator</span>
+          </div>
+          <div class="grid-4" id="cmd-ai-ops"></div>
+        </div>
+
+        <div class="grid-2" style="margin-top:14px">
           <div class="card">
             <div class="card-title">Recent Activity</div>
             <div id="command-activity" class="empty">Loading&#8230;</div>
           </div>
           <div class="card">
-            <div class="card-title">Revenue Cycle Stage Distribution</div>
+            <div class="card-title">Encounter Stage Distribution</div>
             <div id="command-stages" class="empty">Loading&#8230;</div>
           </div>
         </div>
@@ -480,7 +500,7 @@
           <button class="btn sm" onclick="patList()">Refresh</button>
         </div>
         <table class="data">
-          <thead><tr><th>MRN</th><th>Patient</th><th>Encounter</th><th>Expected</div><th>Paid</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>MRN</th><th>Patient</th><th>Encounter</th><th>Expected</th><th>Paid</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="pat-table-body"></tbody>
         </table>
       </section>
@@ -540,18 +560,20 @@
       <section id="ai-orchestrator" class="section">
         <div class="page-header">
           <h1 class="page-title">AI Orchestrator</h1>
-          <p class="page-sub">Bidirectional agent-human task assignment with full task lifecycle. Synthetic Ghanaian data: NHIS, private, self-pay; inpatient/outpatient; GHS currency.</p>
+          <p class="page-sub">Bidirectional agent-human task assignment with full task lifecycle. Agent overview, detail workspace, and task lifecycle controls.</p>
         </div>
         <div class="section-toolbar">
           <button class="btn sm primary" onclick="aiOrchestratorRefresh()">Refresh Agent States</button>
           <button class="btn sm" onclick="orchSeedGhanaian()">Seed Ghanaian Demo Data</button>
-          <span class="tag">Interactive agent workspaces</span>
+          <span class="tag">Interagent &amp; human task lifecycle</span>
         </div>
+
+        <!-- Agent Overview Metrics -->
         <div id="ai-orchestrator-metrics" style="margin-top:8px"></div>
 
         <!-- Agent Workspaces -->
         <div class="card" style="margin-top:12px">
-          <div class="card-title">Agent Workspaces</div>
+          <div class="card-title">Agent Overview</div>
           <div id="ai-orchestrator-grid" class="grid-3"></div>
         </div>
 
@@ -1662,26 +1684,88 @@ function demoGotoScreen(screen){
    A. COMMAND CENTER
    ================================================================ */
 async function cmdRefresh(){
-  // Panel 1: KPI Metrics
+  // Q1: Financial Status
   try{
     const ov = await api('/api/dashboard/overview');
     const k = ov.kpis||{};
+    const totalCharges = parseFloat(k.total_charges||0);
+    const totalCollected = parseFloat(k.total_collected||0);
+    const collectionRate = totalCharges>0 ? Math.round((totalCollected/totalCharges)*100) : 0;
     const rows=[
-      ['Total Charges', fmtMoney(k.total_charges)],
-      ['Total Collected', fmtMoney(k.total_collected)],
-      ['Outstanding', fmtMoney(k.total_outstanding)],
+      ['Total Charges', fmtMoney(totalCharges)],
+      ['Total Collected', fmtMoney(totalCollected)],
+      ['Outstanding', fmtMoney(parseFloat(k.total_outstanding||0))],
+      ['Collection Rate', collectionRate+'%'],
       ['Claims Submitted', k.claims_submitted],
       ['Claims Pending', k.claims_pending],
-      ['Claims Rejected', k.claims_rejected],
-      ['Claims Requiring Attention', k.claims_requiring_attention],
       ['Unreconciled Payments', fmtMoney(k.unreconciled_payments)],
-      ['Open Exceptions', k.open_exceptions],
-      ['Pending Reviews', k.pending_reviews],
     ];
-    $el('command-metrics').innerHTML=rows.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
-  }catch(e){ $el('command-metrics').innerHTML = `<div class="error">Error loading metrics: ${esc(e.message)}</div>`; }
+    $el('cmd-financial').innerHTML=rows.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-financial').innerHTML = `<div class="error">Error loading financials: ${esc(e.message)}</div>`; }
 
-  // Panel 2: Recent Activity
+  // Q2: Stuck Revenue
+  try{
+    const [claims, dens, lk] = await Promise.all([
+      api('/api/claims').catch(()=>[]),
+      api('/api/denials').catch(()=>[]),
+      api('/api/leakage').catch(()=>({items:[]}))
+    ]);
+    const arOutstanding = (claims||[]).reduce((s,c)=>s+(parseFloat(c.approved_amount||0)-parseFloat(c.paid_amount||0)),0);
+    const deniedAmount = (dens||[]).reduce((s,d)=>s+parseFloat(d.amount||0),0);
+    const leakage = (lk&&lk.items)||[];
+    const leakageTotal = leakage.reduce((s,i)=>s+parseFloat(i.amount||0),0);
+    const unreconciled = parseFloat(k&&k.unreconciled_payments||0);
+    const stuck = [
+      ['A/R Outstanding', fmtMoney(arOutstanding)],
+      ['Denied Amount', fmtMoney(deniedAmount)],
+      ['Unreconciled Payments', fmtMoney(unreconciled)],
+      ['Potential Leakage', fmtMoney(leakageTotal)],
+    ];
+    $el('cmd-stuck').innerHTML=stuck.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-stuck').innerHTML = `<div class="error">Error loading stuck revenue: ${esc(e.message)}</div>`; }
+
+  // Q3: Required Actions
+  try{
+    const [iss, docs, codes, recs] = await Promise.all([
+      api('/api/dashboard/issues').catch(()=>({exceptions:[],review_tasks:[]})),
+      api('/api/documentation-reviews').catch(()=>[]),
+      api('/api/coding-suggestions').catch(()=>[]),
+      api('/api/reconciliations').catch(()=>[])
+    ]);
+    const openExceptions = (iss.exceptions||[]).filter(e=>e.status==='open'||e.status==='pending').length;
+    const pendingReviews = (iss.review_tasks||[]).filter(r=>r.status==='pending'||r.status==='open').length;
+    const pendingDocs = (docs||[]).filter(d=>d.status==='pending').length;
+    const pendingCodes = (codes||[]).filter(c=>c.status==='pending_review').length;
+    const pendingRecs = (recs||[]).filter(r=>r.review_decision==='pending').length;
+    const actions = [
+      ['Open Exceptions', openExceptions],
+      ['Pending Reviews', pendingReviews],
+      ['Documentation Reviews', pendingDocs],
+      ['Coding Reviews', pendingCodes],
+      ['Reconciliations Pending', pendingRecs],
+    ];
+    $el('cmd-actions').innerHTML=actions.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-actions').innerHTML = `<div class="error">Error loading actions: ${esc(e.message)}</div>`; }
+
+  // Q4: AI Operations
+  try{
+    const [st, m] = await Promise.all([
+      api('/api/orchestrator/state').catch(()=>({agents:[]})),
+      api('/api/orchestrator/metrics').catch(()=>({}))
+    ]);
+    const agents = (st&&st.agents)||[];
+    const activeAgents = agents.filter(a=>a.status&&a.status.toLowerCase()!=='idle').length;
+    const aiOps = [
+      ['Total Agents', agents.length],
+      ['Active Agents', activeAgents],
+      ['Pending Tasks', m.pending||0],
+      ['Completed Tasks', m.completed||0],
+      ['Escalated', m.escalated||0],
+    ];
+    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-ai-ops').innerHTML = `<div class="error">Error loading AI ops: ${esc(e.message)}</div>`; }
+
+  // Recent Activity
   try{
     const act = await api('/api/dashboard/activity');
     let ah='';
@@ -1691,19 +1775,7 @@ async function cmdRefresh(){
     $el('command-activity').innerHTML = ah || '<div class="empty">No recent activity.</div>';
   }catch(e){ $el('command-activity').innerHTML = `<div class="error">Error loading activity: ${esc(e.message)}</div>`; }
 
-  // Panel 3: Issues & Alerts
-  try{
-    const iss = await api('/api/dashboard/issues');
-    let ih='';
-    [...(iss.exceptions||[]), ...(iss.review_tasks||[])].slice(0,8).forEach(r=>{
-      const sev = r.severity||'low';
-      ih+=`<div class="alert-item ${sev}"><div class="alert-title">${esc(r.title||r.task_type||'Review item')}</div><div class="alert-meta">${esc(r.explanation||r.context||'')}</div><div class="alert-meta">${statusBadge(r.status||'pending')} &bull; ${esc(r.detecting_agent||r.assigned_to||'')}</div></div>`;
-    });
-    $el('command-alerts').innerHTML = ih || '<div class="empty">No priority issues.</div>';
-    $el('command-reviews').innerHTML = ih || '<div class="empty">No review tasks.</div>';
-  }catch(e){ $el('command-alerts').innerHTML = `<div class="error">Error loading issues: ${esc(e.message)}</div>`; $el('command-reviews').innerHTML = `<div class="error">Error loading reviews: ${esc(e.message)}</div>`; }
-
-  // Panel 4: Encounter Stage Distribution
+  // Encounter Stage Distribution
   try{
     const encs = await api('/api/encounters');
     const stages={};
