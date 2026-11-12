@@ -74,9 +74,10 @@ def run_detection() -> Dict[str, Any]:
     pays = c.execute("SELECT * FROM patient_payments WHERE payment_status='confirmed'").fetchall()
     pseen = {}
     for p in pays:
-        key = (p.get("reference"), float(p.get("amount") or 0), p.get("balance_id"))
+        pd = dict(p)
+        key = (pd.get("reference"), float(pd.get("amount") or 0), pd.get("balance_id"))
         if key[0]:
-            pseen.setdefault(key, []).append(dict(p))
+            pseen.setdefault(key, []).append(pd)
     for key, group in pseen.items():
         if len(group) > 1:
             score = 70
@@ -91,10 +92,11 @@ def run_detection() -> Dict[str, Any]:
     # Suspicious reversals
     reversals = c.execute("SELECT * FROM patient_payments WHERE payment_status='reversed'").fetchall()
     for r in reversals:
+        rd = dict(r)
         score = 45
         _upsert_alert(c, "REVERSAL:"+r["id"], {
             "risk_score": score, "risk_level": _risk_level(score), "anomaly_category": "Suspicious payment reversals",
-            "related_payment_id": r["id"], "estimated_exposure": float(r.get("amount") or 0),
+            "related_payment_id": r["id"], "estimated_exposure": float(rd.get("amount") or 0),
             "evidence": {"payment_id": r["id"]},
             "explanation": "A payment reversal was recorded; review for legitimacy.",
             "recommended_action": "Confirm reversal authorization and reconcile balance."

@@ -1111,7 +1111,8 @@ function statusBadge(s){
 function hideModal(id){ $el(id).classList.remove('open'); }
 
 async function seedData(){
-  try{ await api('/api/demo/seed-all',{method:'POST'}); alert('Demo data seeded'); loadFacilities(); loadRoles(); }
+  if(!confirm('Seed/refresh all demo data? Existing demo records will be cleared and rebuilt.')) return;
+  try{ await api('/api/demo/seed-all?force=1',{method:'POST'}); alert('Demo data seeded (all sections populated)'); location.reload(); }
   catch(e){ alert('Seed failed: '+e.message); }
 }
 async function resetData(){
@@ -2049,20 +2050,22 @@ async function ldLoadAnalytics(){
    ================================================================ */
 async function riList(){
   try{
-    const lk = await api('/api/leakage');
-    const items = lk.items||[];
-    $el('ri-total').textContent = fmtMoney(lk.total_potential_leakage||0);
+    // Use the persisted cases list (has id/amount/evidence/status), not the raw scan items
+    const items = await api('/api/leakage/cases');
+    const openItems = (items||[]).filter(i=>!['RESOLVED','DISMISSED','FALSE_POSITIVE'].includes(i.status));
+    const totalEst = openItems.reduce((s,i)=>s+(Number(i.estimated_exposure)||0),0);
+    $el('ri-total').textContent = fmtMoney(totalEst);
     $el('ri-count').textContent = items.length;
-    $el('ri-unresolved').textContent = items.filter(i=>i.status!=='resolved').length;
+    $el('ri-unresolved').textContent = openItems.length;
     let tb='';
-    items.forEach(it=>{
+    (items||[]).slice(0,50).forEach(it=>{
       tb+=`<tr>
-        <td><span class="tag">${esc(it.category_label||it.category)}</span></td>
-        <td><span class="mono">${esc(it.entity_type||'')} ${esc(it.claim_number||it.encounter_id||it.entity_id||'')}</span></td>
-        <td>${fmtMoney(it.amount)}</td>
-        <td class="small">${esc(it.evidence||'')}</td>
+        <td><span class="tag">${esc(it.category)}</span></td>
+        <td><span class="mono">${esc(it.entity_type||'')} ${esc(it.claim_id||it.encounter_id||it.entity_id||'')}</span></td>
+        <td>${fmtMoney(it.estimated_exposure)}</td>
+        <td class="small">${esc(it.supporting_evidence||it.evidence||'')}</td>
         <td class="small">${esc(it.recommended_action||'')}</td>
-        <td>${statusBadge(it.status||'open')}</td>
+        <td>${statusBadge(it.status||'DETECTED')}</td>
         <td><button class="btn sm" onclick="riResolve('${esc(it.id)}','${esc(it.category)}')">Resolve</button></td>
       </tr>`;
     });

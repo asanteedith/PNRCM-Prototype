@@ -116,12 +116,22 @@ def detect_denials() -> Dict[str, Any]:
 def list_denials() -> Dict[str, Any]:
     c = get_db()
     rows = c.execute(
-        """SELECT d.*, c.claim_number, c.total_charges, c.patient_id, c.encounter_id
+        """SELECT d.*, c.claim_number, c.total_charges, c.patient_id, c.encounter_id,
+                  c.payer_name, c.payer_type, c.denial_reason AS claim_denial_reason,
+                  c.denial_category AS claim_denial_category
         FROM denials d JOIN claims c ON d.claim_id=c.id
         ORDER BY d.created_at DESC"""
     ).fetchall()
     c.close()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        # Frontend expects payer_name, amount, deadline
+        d["payer_name"] = d.get("payer_name") or d.get("payer_type") or "Unknown"
+        d["amount"] = d.get("total_charges") or 0
+        d["deadline"] = d.get("deadline") or d.get("denial_date")
+        out.append(d)
+    return out
 
 
 def resolve_denial(denial_id: str, decision: str, corrective_action: str = "", resubmit: bool = False) -> Dict[str, Any]:

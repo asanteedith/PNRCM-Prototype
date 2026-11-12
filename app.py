@@ -1403,11 +1403,30 @@ def _seed_encounter(c, patient_id, name, enc_type="outpatient", status="complete
 @app.post("/api/demo/seed-all")
 def demo_seed_all():
     c = get_db()
-    # Idempotency: if patients already seeded, skip primary seeding
+    force = str(request.args.get("force", "")).lower() in ("1", "true", "yes")
+    # Idempotency: unless force, skip if patients already seeded
     existing = c.execute("SELECT COUNT(*) n FROM patients").fetchone()["n"]
-    if existing > 0:
+    if existing > 0 and not force:
         c.close()
-        return jsonify(ok=True, message="Demo data already seeded. Use /api/reset to clear first.", already_seeded=True)
+        return jsonify(ok=True, message="Demo data already seeded. Use /api/reset or ?force=1 to reseed.", already_seeded=True)
+    if force:
+        # Clear all demo tables for a clean, deterministic reseed
+        c.execute("PRAGMA foreign_keys = OFF")
+        _seed_clear_tables = [
+            "events","reviews","runs","claim_followup_attempts","claim_followups","appeals",
+            "collection_attempts","collection_tasks","payment_promises","patient_payments","patient_balances",
+            "fraud_investigations","fraud_alerts","leakage_cases","exceptions","decision_support",
+            "clinical_suggestions","encounter_transitions","registration_timeline","workflow_runs",
+            "claim_vetting","documentation_reviews","denials","payments","claims","services","bills","encounters","patients",
+            "agent_executions","audit_trail","reconciliations","reconciliation_line_items","payment_matches",
+            "underpayment_cases","recovery_workflow","orchestrator_tasks","agent_states","agent_performance",
+            "review_tasks","coding_suggestions","authorizations","claim_states","bill_line_items","charge_line_items",
+        ]
+        for t in _seed_clear_tables:
+            try: c.execute(f"DELETE FROM {t}")
+            except Exception: pass
+        c.execute("PRAGMA foreign_keys = ON")
+        c.commit()
 
     # Helper to create claim state
     def _claim_state(c, claim_id, state, reason="", actor="System"):
@@ -1518,7 +1537,7 @@ def demo_seed_all():
     except Exception: pass
     try: detect_denials(); appeals_mod.detect_and_create_appeals(); followup_mod.ensure_followup(cl2)
     except Exception: pass
-    try: detect_leakage(create_tasks=True)
+    try: leakage_mod.detect_leakage(create_tasks=True)
     except Exception: pass
     try: fraud_mod.run_detection()
     except Exception: pass
@@ -1527,6 +1546,99 @@ def demo_seed_all():
 
     # Reopen DB connection (closed after primary seeding at line 869)
     c = get_db()
+
+    # ---- Comprehensive data so NO section is empty ----
+    # 1) Patient balances for EVERY encounter (self-pay/AR/patient-finance)
+    try:
+        enc_all = c.execute("SELECT id, encounter_id, patient_id, encounter_type, status FROM encounters").fetchall()
+        methods = ['Cash', 'Mobile Money', 'Card', 'Bank Transfer', 'NHIS']
+        for i, e in enumerate(enc_all):
+            ed = dict(e)
+            # compute charges from services
+            svc_total = c.execute("SELECT COALESCE(SUM(total_price),0) s FROM services WHERE encounter_id=?", (ed["id"],)).fetchone()["s"]
+            svc_total = float(svc_total or 0)
+            if svc_total <= 0:
+                svc_total = 150.0
+            copay = round(svc_total * 0.1, 2)
+            # vary payment state deterministically
+            if i % 4 == 0:
+                paid = svc_total; outstanding = 0.0; status = "paid"
+            elif i % 4 == 1:
+                paid = round(svc_total * 0.5, 2); outstanding = round(svc_total - paid, 2); status = "partial"
+            elif i % 4 == 2:
+                paid = 0.0; outstanding = svc_total; status = "outstanding"
+            else:
+                paid = 0.0; outstanding = svc_total; status = "pending"
+            c.execute(
+                """INSERT INTO patient_balances(id, patient_id, encounter_id, expected_copayment,
+                    amount_due, amount_paid, outstanding, status, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), ed["patient_id"], ed["id"], copay,
+                 svc_total, paid, outstanding, status, now(), now()),
+            )
+    except Exception as e:
+        print(f"Balance seeding error: {e}")
+
+    # 2) Bill line items for EVERY bill (so billing/leakage line-item views have data)
+    try:
+        bill_rows = c.execute("SELECT id, encounter_id, subtotal FROM bills").fetchall()
+        for b in bill_rows:
+            bd = dict(b)
+            existing_li = c.execute("SELECT COUNT(*) n FROM bill_line_items WHERE bill_id=?", (bd["id"],)).fetchone()["n"]
+            if existing_li:
+                continue
+            svcs = c.execute("SELECT id, service_name, total_price FROM services WHERE encounter_id=?", (bd["encounter_id"],)).fetchall()
+            if svcs:
+                for s in svcs:
+                    sd = dict(s)
+                    c.execute(
+                        "INSERT INTO bill_line_items(id, bill_id, service_id, line_code, description, amount, created_at) VALUES(?,?,?,?,?,?,?)",
+                        (str(uuid.uuid4()), bd["id"], sd["id"], "LINE-" + str(uuid.uuid4())[:4].upper(),
+                         sd["service_name"], float(sd["total_price"] or 0), now()),
+                    )
+            else:
+                c.execute(
+                    "INSERT INTO bill_line_items(id, bill_id, service_id, line_code, description, amount, created_at) VALUES(?,?,?,?,?,?,?)",
+                    (str(uuid.uuid4()), bd["id"], None, "LINE-1", "Service charge", float(bd["subtotal"] or 0), now()),
+                )
+    except Exception as e:
+        print(f"Line item seeding error: {e}")
+
+    # 3) Claim follow-ups for EVERY denied claim (AR & follow-up)
+    try:
+        denied = c.execute("SELECT id, claim_number, patient_id FROM claims WHERE status IN ('denied','rejected')").fetchall()
+        for cl in denied:
+            cd = dict(cl)
+            ex = c.execute("SELECT COUNT(*) n FROM claim_followups WHERE claim_id=?", (cd["id"],)).fetchone()["n"]
+            if ex:
+                continue
+            c.execute(
+                """INSERT INTO claim_followups(id, claim_id, status, priority, assigned_staff,
+                    due_date, next_followup_date, notes, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), cd["id"], "open", "high", "Unassigned",
+                 now(), now(), "Auto-created for denied claim follow-up", now(), now()),
+            )
+    except Exception as e:
+        print(f"Follow-up seeding error: {e}")
+
+    # 4) Denials for every denied/rejected claim (denial management)
+    try:
+        denied2 = c.execute("SELECT * FROM claims WHERE status IN ('denied','rejected')").fetchall()
+        for cl in denied2:
+            cd = dict(cl)
+            ex = c.execute("SELECT COUNT(*) n FROM denials WHERE claim_id=?", (cd["id"],)).fetchone()["n"]
+            if ex:
+                continue
+            c.execute(
+                """INSERT INTO denials(id, claim_id, denial_date, denial_reason, denial_category,
+                    corrective_action, status, resubmission_count, resolved_at, created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), cd["id"], now(), cd.get("denial_reason") or "Denied by payer",
+                 cd.get("denial_category") or "other", "Review and correct", "open", 0, None, now()),
+            )
+    except Exception as e:
+        print(f"Denial seeding error: {e}")
 
     # Seed documentation reviews for encounters
     try:
@@ -1545,19 +1657,20 @@ def demo_seed_all():
     except Exception as e:
         print(f"Doc review seeding error: {e}")
 
-    # Seed patient payments for claims with approved_amount > 0
+    # Seed patient payments for claims with approved_amount > 0 (linked to a real balance)
     try:
-        paid_claims = c.execute("SELECT id, claim_number, patient_id, approved_amount, paid_amount FROM claims WHERE approved_amount > 0").fetchall()
+        paid_claims = c.execute("SELECT id, claim_number, patient_id, encounter_id, approved_amount, paid_amount FROM claims WHERE approved_amount > 0").fetchall()
         methods = ['Cash', 'Mobile Money', 'Card', 'Bank Transfer', 'NHIS']
         for i, cl in enumerate(paid_claims):
             cl_d = dict(cl)
             amt = float(cl_d["paid_amount"] or cl_d["approved_amount"] or 0)
             if amt > 0:
                 pid = str(uuid.uuid4())
+                bal = c.execute("SELECT id FROM patient_balances WHERE encounter_id=? LIMIT 1", (cl_d["encounter_id"],)).fetchone()
                 c.execute(
                     """INSERT INTO patient_payments(id, balance_id, patient_id, encounter_id, amount, payment_method, payment_date, payment_status, reference, recorded_by, reconciliation_status, created_at)
                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (pid, cl_d["id"], cl_d["patient_id"], None, amt, methods[i % len(methods)], now(), 'confirmed', f"PAY-{i+1:03d}", 'System', 'reconciled', now())
+                    (pid, bal["id"] if bal else None, cl_d["patient_id"], cl_d["encounter_id"], amt, methods[i % len(methods)], now(), 'confirmed', f"PAY-{i+1:03d}", 'System', 'reconciled', now())
                 )
     except Exception as e:
         print(f"Patient payment seeding error: {e}")
@@ -1626,7 +1739,15 @@ def demo_seed_all():
 
     c.commit(); c.close()
 
-    return jsonify(ok=True, message="Synthetic demo scenarios seeded. All data synthetic.")
+    # Final: populate revenue leakage cases so the Leakage Detection section is never empty
+    _leak_result = None
+    try:
+        _leak_result = leakage_mod.detect_leakage(create_tasks=True)
+    except Exception as e:
+        import traceback
+        _leak_result = {"error": str(e), "trace": traceback.format_exc()[-400:]}
+
+    return jsonify(ok=True, message="Synthetic demo scenarios seeded. All data synthetic.", leakage=_leak_result if isinstance(_leak_result, dict) else str(_leak_result))
 
 
 # ---------------- RCM Evidence Intelligence ----------------
