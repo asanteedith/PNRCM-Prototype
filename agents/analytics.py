@@ -16,25 +16,36 @@ def _date_ok(ts: str, start: str = None, end: str = None) -> bool:
     if end and d > end: return False
     return True
 
+def _collected_revenue(c, start: str = None, end: str = None) -> float:
+    """Canonical collected revenue = money actually received.
+
+    Source of truth is the payments ledger (every bill/claim payment writes a
+    completed payment row) plus confirmed patient payments. This avoids double
+    counting bills.paid/claims.paid_amount alongside the payments ledger.
+    """
+    pays = [dict(r) for r in c.execute(
+        "SELECT amount, created_at FROM payments WHERE status IN ('completed','confirmed')").fetchall()]
+    pat = [dict(r) for r in c.execute(
+        "SELECT amount, payment_date FROM patient_payments WHERE payment_status='confirmed'").fetchall()]
+    if start or end:
+        pays = [p for p in pays if _date_ok(p.get("created_at"), start, end)]
+        pat = [p for p in pat if _date_ok(p.get("payment_date"), start, end)]
+    return sum(float(p.get("amount") or 0) for p in pays) + sum(float(p.get("amount") or 0) for p in pat)
+
+
 def overview(start: str = None, end: str = None) -> Dict[str, Any]:
     c = get_db()
     bills = [dict(r) for r in c.execute("SELECT * FROM bills").fetchall()]
     claims = [dict(r) for r in c.execute("SELECT * FROM claims").fetchall()]
-    payments = [dict(r) for r in c.execute("SELECT * FROM payments WHERE status='completed'").fetchall()]
-    pat_pays = [dict(r) for r in c.execute("SELECT * FROM patient_payments WHERE payment_status='confirmed'").fetchall()]
     # filter by date when provided (use created/submitted/payment dates)
     if start or end:
         bills = [b for b in bills if _date_ok(b.get("created_at"), start, end)]
         claims = [c_ for c_ in claims if _date_ok(c_.get("created_at") or c_.get("submitted_at"), start, end)]
     total_billed = sum(float(b.get("total") or 0) for b in bills)
     approved = sum(float(c_.get("approved_amount") or 0) for c_ in claims if c_.get("status") in ("approved","paid"))
-    # Collected revenue: sum of payments table + patient_payments table (avoid double count by deduping by reference)
-    collected_claims = sum(float(c_.get("paid_amount") or 0) for c_ in claims)
-    collected_bills = sum(float(b.get("paid") or 0) for b in bills)
-    collected_pat = sum(float(p.get("amount") or 0) for p in pat_pays)
-    collected_sys = sum(float(p.get("amount") or 0) for p in payments)
-    # Use the higher of claims-paid or bills-paid for system-recorded collections, plus patient payments
-    collected = max(collected_claims, collected_bills) + collected_pat + collected_sys
+    # Collected revenue: canonical money received from the payments ledger + patient payments.
+    # Do NOT add bills.paid / claims.paid_amount on top of the payments ledger (double counts).
+    collected = _collected_revenue(c, start, end)
     outstanding = sum(float(b.get("outstanding") or 0) for b in bills if (b.get("status") not in ("paid","rejected")))
     rejected = [c_ for c_ in claims if c_.get("status") in ("denied","rejected")]
     rejected_amt = sum(float(c_.get("total_charges") or 0) for c_ in rejected)
@@ -43,7 +54,9 @@ def overview(start: str = None, end: str = None) -> Dict[str, Any]:
     clean_rate = (len(clean)/len(submitted)*100) if submitted else 0
     denial_rate = (len(rejected)/len(submitted)*100) if submitted else 0
     # potential leakage from leakage_cases table (estimated) or 0
-    leak_rows = c.execute("SELECT COALESCE(SUM(amount),0) s FROM leakage_cases WHERE status NOT IN ('Recovered','Closed')").fetchone()
+    leak_rows = c.execute("SELECT COALESCE(SUM(estimated_exposure),0) s FROM leakage_cases WHERE status NOT IN ('RESOLVED','Recovered','Closed','DISMISSED','FALSE_POSITIVE')").fetchone()
+    if not leak_rows or leak_rows["s"] is None:
+        leak_rows = c.execute("SELECT COALESCE(SUM(amount),0) s FROM leakage_cases WHERE status NOT IN ('Recovered','Closed')").fetchone()
     potential_leakage = float(leak_rows["s"] or 0)
     # avg processing duration from agent_executions
     dur = c.execute("SELECT AVG(duration_ms) a FROM agent_executions WHERE duration_ms IS NOT NULL").fetchone()["a"]
@@ -106,19 +119,19 @@ def revenue_analytics(start: str = None, end: str = None) -> Dict[str, Any]:
     c = get_db()
     bills = [dict(r) for r in c.execute("SELECT * FROM bills").fetchall()]
     claims = [dict(r) for r in c.execute("SELECT * FROM claims").fetchall()]
-    c.close()
     if start or end:
         bills = [b for b in bills if _date_ok(b.get("created_at"), start, end)]
         claims = [x for x in claims if _date_ok(x.get("created_at"), start, end)]
     billed = sum(float(b.get("total") or 0) for b in bills)
     approved = sum(float(x.get("approved_amount") or 0) for x in claims)
-    collected = sum(float(x.get("paid_amount") or 0) for x in claims)
+    collected = _collected_revenue(c, start, end)
     outstanding = sum(float(b.get("outstanding") or 0) for b in bills)
     underpayments = sum(max(float(x.get("approved_amount") or 0)-float(x.get("paid_amount") or 0),0) for x in claims if x.get("status")=="paid")
     by_payer = {}
     for x in claims:
         k = x.get("payer_name") or x.get("payer_type") or "Unknown"
         by_payer[k] = by_payer.get(k, 0) + float(x.get("total_charges") or 0)
+    c.close()
     return {
         "currency": CURRENCY,
         "billed_revenue": round(billed,2), "approved_revenue": round(approved,2),
@@ -132,18 +145,26 @@ def leakage_analytics() -> Dict[str, Any]:
     c = get_db()
     rows = [dict(r) for r in c.execute("SELECT * FROM leakage_cases ORDER BY created_at DESC").fetchall()]
     c.close()
+    def _est(r):
+        return float(r["estimated_exposure"]) if r.get("estimated_exposure") is not None else float(r.get("amount") or 0)
+    recovered_statuses = {"Recovered", "RESOLVED", "Closed"}
+    dismissed_statuses = {"DISMISSED", "FALSE_POSITIVE"}
     by_cat = {}
     for r in rows:
-        by_cat[r["category"]] = by_cat.get(r["category"], 0) + float(r.get("amount") or 0)
-    total = sum(float(r.get("amount") or 0) for r in rows)
-    recovered = sum(float(r.get("amount") or 0) for r in rows if r.get("status") in ("Recovered",))
+        by_cat[r["category"]] = by_cat.get(r["category"], 0) + _est(r)
+    total = sum(_est(r) for r in rows)
+    recovered = sum(float(r.get("verified_recovered_amount") or 0) for r in rows) or sum(_est(r) for r in rows if r.get("status") in recovered_statuses)
+    confirmed = sum(float(r.get("confirmed_amount") or 0) for r in rows)
+    unresolved = sum(_est(r) for r in rows if r.get("status") not in recovered_statuses | dismissed_statuses)
     return {
         "currency": CURRENCY,
-        "total_estimated": round(total,2), "recovered": round(recovered,2),
-        "unresolved": round(total-recovered,2),
+        "total_estimated": round(total,2),
+        "confirmed": round(confirmed,2),
+        "recovered": round(recovered,2),
+        "unresolved": round(unresolved,2),
         "by_category": [{"category":k,"amount":round(v,2)} for k,v in by_cat.items()],
         "cases": rows,
-        "note": "Suspected/estimated leakage vs confirmed recovered revenue are distinct."
+        "note": "Suspected/estimated leakage vs confirmed vs verified recovered revenue are distinct."
     }
 
 def ar_aging() -> Dict[str, Any]:

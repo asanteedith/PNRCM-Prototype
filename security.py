@@ -123,7 +123,13 @@ def _get_current_username() -> Optional[str]:
 
 def log_access(action: str, resource: str = "", resource_id: str = "",
                status: str = "ok", detail: str = "") -> None:
-    """Log an access event to session_access_log and audit_trail."""
+    """Log an access event to session_access_log and audit_trail.
+
+    Uses try/finally so the connection is ALWAYS closed, even if a statement
+    fails. A leaked open transaction here would hold the SQLite write lock and
+    block all subsequent writes.
+    """
+    c = None
     try:
         c = get_db()
         username = _get_current_username() or "system"
@@ -146,9 +152,18 @@ def log_access(action: str, resource: str = "", resource_id: str = "",
             input_summary=detail, output_summary={"status": status},
         )
         c.commit()
-        c.close()
     except Exception:
-        pass
+        try:
+            if c is not None:
+                c.rollback()
+        except Exception:
+            pass
+    finally:
+        if c is not None:
+            try:
+                c.close()
+            except Exception:
+                pass
 
 
 def apply_facility_isolation(query: str, params: list, facility_column: str = "facility_id") -> tuple:

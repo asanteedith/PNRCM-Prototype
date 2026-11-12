@@ -94,16 +94,22 @@ def _existing_case(c, entity_type: str, entity_id: str, category: str) -> Option
     return dict(row) if row else None
 
 
-def _persist_case(c, item: Dict[str, Any]) -> str:
-    """Insert or update a leakage case in leakage_cases."""
+def _persist_case(c, item: Dict[str, Any]) -> tuple:
+    """Insert or update a leakage case in leakage_cases.
+
+    Returns (case_id, created) where created is True only when a new case row
+    was inserted (used to avoid creating duplicate orchestrator tasks on repeat
+    detection runs).
+    """
     existing = _existing_case(c, item["entity_type"], item["entity_id"], item["category"])
     if existing:
         c.execute(
             """UPDATE leakage_cases
-               SET estimated_exposure=?, supporting_evidence=?, recommended_action=?, updated_at=?,
+               SET estimated_exposure=?, amount=?, supporting_evidence=?, recommended_action=?, updated_at=?,
                    description=COALESCE(?, description)
              WHERE id=?""",
             (
+                item["estimated_exposure"],
                 item["estimated_exposure"],
                 item["supporting_evidence"],
                 item["recommended_action"],
@@ -112,38 +118,44 @@ def _persist_case(c, item: Dict[str, Any]) -> str:
                 existing["id"],
             ),
         )
-        return existing["id"]
+        return existing["id"], False
     cid = str(uuid.uuid4())
     c.execute(
         """INSERT INTO leakage_cases(id, facility_id, category, description, detection_source,
-            detection_rule, supporting_evidence, estimated_exposure, confirmed_amount,
+            detection_rule, supporting_evidence, amount, estimated_exposure, confirmed_amount,
             verified_recovered_amount, priority, status, assigned_user, recommended_action,
             resolution_notes, false_positive_reason, entity_type, entity_id, patient_id,
             encounter_id, claim_id, created_at, updated_at, resolved_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,'DETECTED',NULL,?,NULL,NULL,?,?,?,?,?,?,?,NULL)""",
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
-            cid,
-            item.get("facility_id"),
-            item["category"],
-            item.get("description", ""),
-            item.get("detection_source", "system_scan"),
-            item.get("detection_rule", ""),
-            item["supporting_evidence"],
-            item["estimated_exposure"],
-            0.0,
-            0.0,
-            item["priority"],
-            item.get("description", ""),
-            item["entity_type"],
-            item["entity_id"],
-            item.get("patient_id"),
-            item.get("encounter_id"),
-            item.get("claim_id"),
-            now(),
-            now(),
+            cid,                                    # id
+            item.get("facility_id"),                # facility_id
+            item["category"],                       # category
+            item.get("description", ""),            # description
+            item.get("detection_source", "system_scan"),  # detection_source
+            item.get("detection_rule", ""),         # detection_rule
+            item["supporting_evidence"],            # supporting_evidence
+            item["estimated_exposure"],             # amount (legacy, kept in sync)
+            item["estimated_exposure"],             # estimated_exposure
+            0.0,                                    # confirmed_amount
+            0.0,                                    # verified_recovered_amount
+            item["priority"],                       # priority
+            "DETECTED",                             # status
+            None,                                   # assigned_user
+            item.get("description", ""),            # recommended_action
+            None,                                   # resolution_notes
+            None,                                   # false_positive_reason
+            item["entity_type"],                    # entity_type
+            item["entity_id"],                      # entity_id
+            item.get("patient_id"),                 # patient_id
+            item.get("encounter_id"),               # encounter_id
+            item.get("claim_id"),                   # claim_id
+            now(),                                  # created_at
+            now(),                                  # updated_at
+            None,                                   # resolved_at
         ),
     )
-    return cid
+    return cid, True
 
 
 def _transition_case(case_id: str, new_status: str, actor: str,
@@ -571,19 +583,28 @@ def detect_leakage(create_tasks: bool = True, categories: Optional[List[str]] = 
             total_leakage += item["estimated_exposure"]
             leakage_items.append(item)
             if create_tasks:
-                cid = _persist_case(c, item)
-                cases_created += 1
-                orch.create_orchestrator_task(
-                    c, "leakage_review", "leakage_case", cid,
-                    agent_name="Revenue Leakage Detection Agent",
-                    direction="agent_to_human",
-                    priority=item["priority"],
-                    context=item["supporting_evidence"],
-                    ai_recommendation=item["recommended_action"],
-                    financial_impact=item["estimated_exposure"],
-                    auto_assign=True,
-                )
-                tasks_created += 1
+                cid, created = _persist_case(c, item)
+                if created:
+                    cases_created += 1
+                    # Only create an orchestrator task for a NEW case. Repeat
+                    # detection runs must not spawn duplicate tasks. If an open
+                    # task already exists for this case, reuse it.
+                    existing_task = c.execute(
+                        "SELECT id FROM orchestrator_tasks WHERE entity_type='leakage_case' AND entity_id=? AND task_type='leakage_review' AND status IN ('created','assigned','started') LIMIT 1",
+                        (cid,),
+                    ).fetchone()
+                    if not existing_task:
+                        orch.create_orchestrator_task(
+                            c, "leakage_review", "leakage_case", cid,
+                            agent_name="Revenue Leakage Detection Agent",
+                            direction="agent_to_human",
+                            priority=item["priority"],
+                            context=item["supporting_evidence"],
+                            ai_recommendation=item["recommended_action"],
+                            financial_impact=item["estimated_exposure"],
+                            auto_assign=True,
+                        )
+                        tasks_created += 1
 
     leakage_items.sort(key=lambda x: x["estimated_exposure"], reverse=True)
 
@@ -629,9 +650,9 @@ def list_leakage_cases(filters: Optional[Dict[str, Any]] = None) -> List[Dict[st
     if f.get("assigned_user"):
         q += " AND assigned_user=?"; params.append(f["assigned_user"])
     if f.get("min_amount"):
-        q += " AND estimated_exposure >= ?"; params.append(float(f["min_amount"]))
+        q += " AND COALESCE(estimated_exposure, amount, 0) >= ?"; params.append(float(f["min_amount"]))
     if f.get("max_amount"):
-        q += " AND estimated_exposure <= ?"; params.append(float(f["max_amount"]))
+        q += " AND COALESCE(estimated_exposure, amount, 0) <= ?"; params.append(float(f["max_amount"]))
     if f.get("date_from"):
         q += " AND created_at >= ?"; params.append(f["date_from"])
     if f.get("date_to"):
@@ -639,7 +660,12 @@ def list_leakage_cases(filters: Optional[Dict[str, Any]] = None) -> List[Dict[st
     q += " ORDER BY created_at DESC"
     rows = c.execute(q, params).fetchall()
     c.close()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["estimated_exposure"] = float(d["estimated_exposure"]) if d["estimated_exposure"] is not None else float(d.get("amount") or 0)
+        out.append(d)
+    return out
 
 
 def get_leakage_case(case_id: str) -> Optional[Dict[str, Any]]:
@@ -647,7 +673,11 @@ def get_leakage_case(case_id: str) -> Optional[Dict[str, Any]]:
     c = get_db()
     row = c.execute("SELECT * FROM leakage_cases WHERE id=?", (case_id,)).fetchone()
     c.close()
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    d["estimated_exposure"] = float(d["estimated_exposure"]) if d["estimated_exposure"] is not None else float(d.get("amount") or 0)
+    return d
 
 
 def assign_leakage_case(case_id: str, assigned_user: str, actor: str = "User") -> Dict[str, Any]:
@@ -843,10 +873,11 @@ def leakage_analytics() -> Dict[str, Any]:
 
     for case in cases:
         cat = case["category"] or "uncategorized"
+        est = float(case["estimated_exposure"] if case["estimated_exposure"] is not None else (case["amount"] or 0))
         if cat not in by_category:
             by_category[cat] = {"count": 0, "estimated_exposure": 0.0, "confirmed_amount": 0.0, "recovered_amount": 0.0}
         by_category[cat]["count"] += 1
-        by_category[cat]["estimated_exposure"] += float(case["estimated_exposure"] or 0)
+        by_category[cat]["estimated_exposure"] += est
         by_category[cat]["confirmed_amount"] += float(case["confirmed_amount"] or 0)
         by_category[cat]["recovered_amount"] += float(case["verified_recovered_amount"] or 0)
 
@@ -856,11 +887,11 @@ def leakage_analytics() -> Dict[str, Any]:
         pr = case["priority"] or "medium"
         by_priority[pr] = by_priority.get(pr, 0) + 1
 
-        estimated_exposure += float(case["estimated_exposure"] or 0)
+        estimated_exposure += est
         confirmed_amount += float(case["confirmed_amount"] or 0)
         recovered_amount += float(case["verified_recovered_amount"] or 0)
         if case["status"] not in TERMINAL_STATES:
-            outstanding_amount += float(case["estimated_exposure"] or 0) - float(case["verified_recovered_amount"] or 0)
+            outstanding_amount += est - float(case["verified_recovered_amount"] or 0)
 
     c.close()
     return {

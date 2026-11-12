@@ -2633,9 +2633,6 @@ def claimit_dashboard():
         "generated_at": now()
     })
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
-
 # ---------------- Security & Access Governance (Phase 7) ----------------
 
 @app.before_request

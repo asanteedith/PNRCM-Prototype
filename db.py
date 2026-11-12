@@ -3,11 +3,20 @@ import sqlite3, json, uuid, datetime, os
 
 DB = os.environ.get("PNRCM_DB", "pnrcm_demo.db")
 
+_wal_initialized = False
+
 def get_db():
+    global _wal_initialized
     c = sqlite3.connect(DB, timeout=30)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys=ON")
-    c.execute("PRAGMA journal_mode=WAL")
+    # journal_mode is persistent; only set once to avoid repeated lock acquisition
+    if not _wal_initialized:
+        try:
+            c.execute("PRAGMA journal_mode=WAL")
+            _wal_initialized = True
+        except Exception:
+            pass
     c.execute("PRAGMA busy_timeout=30000")
     return c
 

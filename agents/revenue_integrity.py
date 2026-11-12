@@ -299,10 +299,10 @@ def detect_closed_claim_leakage(
         leakage_type = "underpayment" if outstanding > 0.01 else "overpayment"
         recoverable = max(0.0, outstanding) if not explained else 0.0
 
-        # Check for existing open leakage case
+        # Check for existing open leakage case (statuses use UPPERCASE lifecycle)
         existing = c.execute(
             """SELECT id FROM leakage_cases
-                 WHERE claim_id=? AND status IN ('Detected','Under Review')
+                 WHERE claim_id=? AND status IN ('DETECTED','UNDER_REVIEW','CONFIRMED','ACTION_REQUIRED','IN_PROGRESS')
                  LIMIT 1""",
             (cld["id"],),
         ).fetchone()
@@ -310,25 +310,26 @@ def detect_closed_claim_leakage(
             continue
 
         case_id = str(uuid.uuid4())
+        _evidence_json = json.dumps({
+            "expected": expected,
+            "approved": approved,
+            "paid": paid,
+            "received": received,
+            "reversed": reversed_total,
+            "outstanding": outstanding,
+            "variance": variance,
+            "explained": explained,
+            "explanation": explanation,
+        })
         c.execute(
-            """INSERT INTO leakage_cases(id, category, amount, estimated, entity_type,
-                entity_id, patient_id, encounter_id, claim_id, evidence,
+            """INSERT INTO leakage_cases(id, category, amount, estimated_exposure, entity_type,
+                entity_id, patient_id, encounter_id, claim_id, evidence, supporting_evidence,
                 recommended_action, status, created_at, updated_at)
-                VALUES(?,?,?,?,'claim',?,?,?,?,?,?,'Detected',?,?)""",
+                VALUES(?,?,?,?, 'claim', ?,?,?,?,?,?,?,'DETECTED',?,?)""",
             (
-                case_id, leakage_type, round(recoverable, 2), 1,
+                case_id, leakage_type, round(recoverable, 2), round(recoverable, 2),
                 cld["id"], cld.get("patient_id"), cld.get("encounter_id"), cld["id"],
-                json.dumps({
-                    "expected": expected,
-                    "approved": approved,
-                    "paid": paid,
-                    "received": received,
-                    "reversed": reversed_total,
-                    "outstanding": outstanding,
-                    "variance": variance,
-                    "explained": explained,
-                    "explanation": explanation,
-                }),
+                _evidence_json, _evidence_json,
                 "Review closed claim for underpayment or unexplained adjustment.",
                 now(), now(),
             ),
@@ -586,19 +587,20 @@ def prioritize_revenue_cases(actor: str = "System") -> List[Dict[str, Any]]:
         """SELECT lc.*, c.created_at as claim_created_at
            FROM leakage_cases lc
            LEFT JOIN claims c ON c.id = lc.claim_id
-           WHERE lc.status IN ('Detected','Under Review')
-           ORDER BY lc.amount DESC""",
+           WHERE lc.status IN ('DETECTED','UNDER_REVIEW','Detected','Under Review')
+           ORDER BY COALESCE(lc.estimated_exposure, lc.amount, 0) DESC""",
     ).fetchall()
     for lk in leaks:
         ld = dict(lk)
         age_days = _days_between(ld.get("claim_created_at"), ld.get("updated_at")) or 0
-        score = _money(ld.get("amount")) * 0.5 + age_days * 0.1
-        reason = f"Leakage {ld.get('category')}: {_money(ld.get('amount')):.2f} {CURRENCY}; {age_days} days old."
+        est = _money(ld["estimated_exposure"]) if ld.get("estimated_exposure") is not None else _money(ld.get("amount"))
+        score = est * 0.5 + age_days * 0.1
+        reason = f"Leakage {ld.get('category')}: {est:.2f} {CURRENCY}; {age_days} days old."
         cases.append({
             "case_id": ld["id"],
             "claim_id": ld.get("claim_id"),
             "case_type": "leakage",
-            "outstanding_amount": round(_money(ld.get("amount")), 2),
+            "outstanding_amount": round(est, 2),
             "age_days": age_days,
             "followup_attempts": 0,
             "priority_score": round(score, 2),
@@ -903,10 +905,10 @@ def detect_leakage_patterns(actor: str = "System") -> List[Dict[str, Any]]:
 
     # Repeated discrepancy types by payer
     leak_rows = c.execute(
-        """SELECT lc.category, c.payer_name, COUNT(*) cnt, SUM(lc.amount) total
+        """SELECT lc.category, c.payer_name, COUNT(*) cnt, SUM(COALESCE(lc.estimated_exposure, lc.amount, 0)) total
            FROM leakage_cases lc
            LEFT JOIN claims c ON c.id = lc.claim_id
-           WHERE lc.status IN ('Resolved','Recovered','Closed')
+           WHERE lc.status IN ('RESOLVED','Resolved','Recovered','Closed')
            GROUP BY lc.category, c.payer_name
            HAVING cnt >= 2""",
     ).fetchall()
@@ -1130,11 +1132,16 @@ def revenue_integrity_analytics() -> Dict[str, Any]:
     potential_leakage = sum(_money(g.get("amount_involved")) for g in gap_cases if (g.get("status") or "") == "Detected")
     confirmed_gaps = sum(_money(g.get("potential_recoverable")) for g in gap_cases if (g.get("status") or "") in ("Under Review","Confirmed"))
 
-    # Leakage cases
+    # Leakage cases (statuses use UPPERCASE lifecycle; amount/estimated_exposure kept in sync)
     leak_cases = [dict(l) for l in c.execute("SELECT * FROM leakage_cases").fetchall()]
-    leakage_detected = sum(_money(l.get("amount")) for l in leak_cases if (l.get("status") or "") == "Detected")
-    leakage_confirmed = sum(_money(l.get("amount")) for l in leak_cases if (l.get("status") or "") in ("Under Review","Confirmed"))
-    leakage_recovered = sum(_money(l.get("amount")) for l in leak_cases if (l.get("status") or "") == "Recovered")
+    def _leak_est(l):
+        return _money(l["estimated_exposure"]) if l.get("estimated_exposure") is not None else _money(l.get("amount"))
+    leak_open_statuses = {"DETECTED", "UNDER_REVIEW"}
+    leak_confirmed_statuses = {"CONFIRMED", "ACTION_REQUIRED", "IN_PROGRESS"}
+    leak_resolved_statuses = {"RESOLVED", "Recovered", "Closed"}
+    leakage_detected = sum(_leak_est(l) for l in leak_cases if (l.get("status") or "") in leak_open_statuses)
+    leakage_confirmed = sum((_money(l.get("confirmed_amount")) or _leak_est(l)) for l in leak_cases if (l.get("status") or "") in leak_confirmed_statuses)
+    leakage_recovered = sum(_money(l.get("verified_recovered_amount")) for l in leak_cases if (l.get("status") or "") in leak_resolved_statuses)
 
     # Write-off audits
     wo_audits = [dict(w) for w in c.execute("SELECT * FROM write_off_audits").fetchall()]
@@ -1163,7 +1170,7 @@ def revenue_integrity_analytics() -> Dict[str, Any]:
                 "definition": "Amount confirmed recoverable but not yet received"},
             "verified_recovered_revenue": {"label": "Verified recovered revenue", "value": round(recovery_verified, 2),
                 "definition": "Revenue recovered and verified through recorded payment (not potential)"},
-            "unresolved_discrepancies": {"label": "Unresolved discrepancies", "value": len([g for g in gap_cases if (g.get("status") or "") == "Detected"]) + len([l for l in leak_cases if (l.get("status") or "") == "Detected"]),
+            "unresolved_discrepancies": {"label": "Unresolved discrepancies", "value": len([g for g in gap_cases if (g.get("status") or "") == "Detected"]) + len([l for l in leak_cases if (l.get("status") or "") in leak_open_statuses]),
                 "definition": "Count of gap and leakage cases still Detected"},
             "write_offs_reviewed": {"label": "Write-offs reviewed", "value": write_offs_reviewed,
                 "definition": "Count of write-off audit records"},

@@ -556,9 +556,10 @@ def payer_intelligence(filters: Optional[Dict[str, Any]] = None) -> Dict[str, An
             if days is not None:
                 p["turnaround_times"].append(days)
 
-        # Authorization issues
-        auth = c.execute("SELECT * FROM authorizations WHERE claim_id=? OR encounter_id IN (SELECT id FROM encounters WHERE patient_id=(SELECT patient_id FROM claims WHERE id=?))",
-                         (cl["id"], cl["id"])).fetchall()
+        # Authorization issues (authorizations link via encounter_id/patient_id)
+        auth = c.execute(
+            "SELECT * FROM authorizations WHERE encounter_id=? OR patient_id=(SELECT patient_id FROM claims WHERE id=?)",
+            (cl.get("encounter_id"), cl["id"])).fetchall()
         if not auth and status in ("denied", "rejected"):
             dr_lower = (cl.get("denial_reason") or "").lower()
             if "auth" in dr_lower or "authorization" in dr_lower:
@@ -686,8 +687,6 @@ def performance_scorecard(start: Optional[str] = None, end: Optional[str] = None
     followups = [dict(r) for r in c.execute(f"SELECT * FROM claim_followups{where_sql}", params).fetchall()]
     # Recovery cases
     recovery_cases = [dict(r) for r in c.execute(f"SELECT * FROM recovery_cases{where_sql}", params).fetchall()]
-
-    c.close()
 
     submitted = [cl for cl in claims if cl.get("status") not in ("draft",)]
     approved = [cl for cl in claims if cl.get("status") in ("approved", "paid")]
