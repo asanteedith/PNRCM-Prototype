@@ -1441,6 +1441,13 @@ def reconciliation_get_route(claim_id):
         return jsonify(error="Reconciliation not found"), 404
     return jsonify(r)
 
+@app.get("/api/payments")
+def payments_list():
+    c = get_db()
+    rows = c.execute("SELECT * FROM payments ORDER BY created_at DESC").fetchall()
+    c.close()
+    return jsonify([dict(x) for x in rows])
+
 @app.post("/api/payments/match")
 def payment_match_route():
     data = request.get_json(force=True)
