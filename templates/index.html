@@ -552,17 +552,30 @@
       <!-- III. Denial Management -->
       <section id="denials" class="section">
         <div class="page-header">
-          <h1 class="page-title">Denial Management &amp; Intelligence</h1>
-          <p class="page-sub">Denial inventory, root cause analysis, appeal eligibility, corrective actions, and resubmission tracking.</p>
+          <h1 class="page-title">Denial Management</h1>
+          <p class="page-sub">Adjudicated denials worklist — prioritized by appeal deadline and dollars at risk. Distinguishes payer denials (post-adjudication) from pre-adjudication rejections. Reason codes use the denial category captured at intake.</p>
         </div>
-        <div class="section-toolbar">
-          <select id="den-filter" onchange="denList()"><option value="">All Denials</option><option value="open">Open</option><option value="appealed">Appealed</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
-          <button class="btn sm" onclick="denList()">Refresh</button>
+
+        <!-- KPI strip -->
+        <div class="metric-strip" id="den-kpis"></div>
+
+        <!-- Filters -->
+        <div class="section-toolbar" style="margin-bottom:10px;flex-wrap:wrap">
+          <input type="text" id="den-search" placeholder="Search claim #, patient, payer, reason…" oninput="denList()" style="flex:1;min-width:200px">
+          <select id="den-filter-status" onchange="denList()"><option value="">All Statuses</option><option value="open">Open</option><option value="appealed">Appealed</option><option value="resolved">Resolved</option></select>
+          <select id="den-filter-priority" onchange="denList()"><option value="">All Priorities</option><option value="work-now">Work Now</option><option value="this-week">This Week</option><option value="can-wait">Can Wait</option></select>
+          <select id="den-filter-category" onchange="denList()"><option value="">All Categories</option></select>
+          <button class="btn sm" onclick="denClearFilters()">Clear</button>
         </div>
+
+        <div style="overflow-x:auto">
         <table class="data">
-          <thead><tr><th>Claim</th><th>Payer</th><th>Denied</th><th>Category</th><th>Recovered</th><th>Remaining</th><th>Age</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Priority</th><th>Claim #</th><th>Patient</th><th>Payer</th><th>DOS</th><th>Denial Category</th><th>Reason</th><th style="text-align:right">Denied Amt</th><th>Deadline</th><th>Age</th><th>Owner</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="den-table-body"></tbody>
         </table>
+        </div>
+        <div id="den-empty" class="empty" style="display:none">No denials match the current filters.</div>
+        <div class="notice" style="margin-top:8px">Priority = f(appeal deadline, dollars at risk). &ldquo;Reason&rdquo; shows the denial category captured at intake (CARC/RARC codes are not fabricated). Deadlines are computed from the denial date using a configurable payer filing window.</div>
       </section>
 
       <!-- J. AR & Follow-Up -->
@@ -1703,46 +1716,113 @@ async function doPayerResponse(claimId, type){
 /* ================================================================
    J. DENIAL MANAGEMENT
    ================================================================ */
+function denPriority(daysLeft, amount){
+  // Priority score: deadline + dollars at risk (Yeam/Oracle-style). Higher = more urgent.
+  let score = 0;
+  if(daysLeft != null){
+    if(daysLeft <= 7) score += 38; else if(daysLeft <= 14) score += 30; else if(daysLeft <= 30) score += 18; else score += 6;
+    if(daysLeft < 0) score += 20; // overdue
+  } else { score += 12; }
+  if(amount >= 5000) score += 32; else if(amount >= 1000) score += 22; else if(amount >= 300) score += 12; else score += 4;
+  if(score >= 60) return {label:'Work Now', cls:'rejected', score};
+  if(score >= 38) return {label:'This Week', cls:'needs-review', score};
+    return {label:'Can Wait', cls:'pending', score};
+}
+
+function denDeadline(denialDate, filingWindowDays){
+  // Appeal/correction deadline from denial date + payer filing window (default 90 days demo).
+  const d = new Date(denialDate); if(isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + (filingWindowDays||90));
+  return d;
+}
+
 async function denList(){
   try{
     const dens = await api('/api/denials');
     const claims = await api('/api/claims');
+    const pats = await api('/api/patients').catch(()=>[]);
     const cMap = {}; (claims||[]).forEach(c=>cMap[c.id]=c);
-    const f = $el('den-filter') ? $el('den-filter').value : '';
-    let rows = (dens||[]).filter(d=>!f || d.status===f);
+    const pMap = {}; (pats||[]).forEach(p=>pMap[p.id]=p);
     const now = Date.now();
-    let tb='';
-    rows.forEach(d=>{
+    const FILING_WINDOW = 90; // demo payer filing window (days)
+
+    // Build enriched rows with priority/deadline/aging
+    let rows = (dens||[]).map(d=>{
       const claim = cMap[d.claim_id] || {};
       const denied = parseFloat(d.amount||claim.total_charges||0);
       const recovered = parseFloat(claim.paid_amount||0);
       const remaining = Math.max(0, denied - recovered);
-      const ageDays = Math.floor((now - new Date(d.created_at||d.denial_date||Date.now()).getTime())/86400000);
-      const ageLabel = ageDays<=0?'Today':(ageDays===1?'1 day':(ageDays>=30?ageDays+' days':ageDays+' days'));
-      const st = (d.status||'open').toLowerCase();
-      let actions = '';
-      if(st==='open' || st==='pending'){
-        actions = `<button class="btn sm" onclick="denResolve('${esc(d.id)}')">Resolve</button>
-          <button class="btn sm" onclick="clmAppeal('${esc(d.claim_id)}')">Appeal</button>`;
-      } else if(st==='resolved' || st==='closed'){
-        actions = `<button class="btn sm" onclick="denView('${esc(d.id)}')">View Details</button>`;
-      } else {
-        actions = `<button class="btn sm" onclick="denView('${esc(d.id)}')">View</button>`;
-      }
+      const denialDate = d.denial_date||d.created_at;
+      const ageDays = Math.max(0, Math.floor((now - new Date(denialDate||Date.now()).getTime())/86400000));
+      const deadline = denDeadline(denialDate, FILING_WINDOW);
+      const daysLeft = deadline ? Math.ceil((deadline.getTime()-now)/86400000) : null;
+      const pri = denPriority(daysLeft, denied);
+      return {d, claim, pat: pMap[claim.patient_id]||{}, denied, recovered, remaining, ageDays, daysLeft, pri, denialDate};
+    });
+
+    // KPIs
+    const openRows = rows.filter(r=>['open','pending','appealed'].includes((r.d.status||'open').toLowerCase()));
+    const totalAtRisk = openRows.reduce((s,r)=>s+r.remaining,0);
+    const totalDenied = rows.reduce((s,r)=>s+r.denied,0);
+    const workNow = rows.filter(r=>r.pri.label==='Work Now' && !['resolved','closed'].includes((r.d.status||'').toLowerCase())).length;
+    const avgDays = openRows.length ? Math.round(openRows.reduce((s,r)=>s+r.ageDays,0)/openRows.length) : 0;
+    $el('den-kpis').innerHTML =
+      anKpi('Open Denials', openRows.length, 'Active inventory') +
+      anKpi('Amount at Risk', fmtMoney(totalAtRisk), 'Unresolved denied $') +
+      anKpi('Work Now', workNow, 'Deadline ≤7d or high $') +
+      anKpi('Avg Denial Age', avgDays+'d', 'Open inventory') +
+      anKpi('Total Denied', fmtMoney(totalDenied), 'All denials');
+
+    // Populate category filter
+    const catSel = $el('den-filter-category');
+    if(catSel && catSel.options.length<=1){
+      const cats=[...new Set(rows.map(r=>r.d.denial_category||'uncategorized'))].sort();
+      cats.forEach(c=>catSel.add(new Option(c,c)));
+    }
+
+    // Apply filters
+    const search = (($el('den-search')||{}).value||'').toLowerCase();
+    const fs = ($el('den-filter-status')||{}).value||'';   const fp = ($el('den-filter-priority')||{}).value||'';
+    const fc = ($el('den-filter-category')||{}).value||'';
+    const filtered = rows.filter(r=>{
+      if(search && !((r.d.claim_id||'').toLowerCase().includes(search) || (r.pat.first_name||'').toLowerCase().includes(search) || (r.d.payer_name||'').toLowerCase().includes(search) || (r.d.denial_category||'').toLowerCase().includes(search))) return false;
+      if(fs && (r.d.status||'').toLowerCase()!==fs) return false;
+      if(fp && r.pri.label.replace(' ','-').toLowerCase()!==fp) return false;
+      if(fc && (r.d.denial_category||'uncategorized')!==fc) return false;
+      return true;
+    }).sort((a,b)=>b.pri.score-a.pri.score);
+
+    let tb='';
+    filtered.forEach(r=>{
+      const d=r.d, st=(d.status||'open').toLowerCase();
+      const deadlineCell = r.daysLeft==null ? '—' : (r.daysLeft<0 ? `<span class="status rejected">${Math.abs(r.daysLeft)}d overdue</span>` : (r.daysLeft<=7 ? `<span class="status needs-review">${r.daysLeft}d left</span>` : `${r.daysLeft}d`));
+      let actions='';
+      if(st==='open'||st==='pending'){ actions = `<button class="btn sm" onclick="denResolve('${esc(d.id)}')">Correct/Appeal</button>`; }
+      else if(st==='appealed'){ actions = `<button class="btn sm" onclick="denView('${esc(d.id)}')">Track</button>`; }
+      else { actions = `<button class="btn sm" onclick="denView('${esc(d.id)}')">View</button>`; }
       tb+=`<tr>
+        <td><span class="status ${r.pri.cls}">${esc(r.pri.label)}</span></td>
         <td><span class="mono small">${ref('CLM', d.claim_id)}</span></td>
+        <td class="small">${esc((r.pat.first_name||'')+' '+(r.pat.last_name||''))||'—'}</td>
         <td>${esc(d.payer_name||'—')}</td>
-        <td>${fmtMoney(denied)}</td>
-        <td class="small"><span class="tag">${esc(d.denial_category||d.denial_reason||'—')}</span></td>
-        <td>${fmtMoney(recovered)}</td>
-        <td>${fmtMoney(remaining)}</td>
-        <td class="small">${ageLabel}</td>
+        <td class="small mono">${esc((r.claim.created_at||'').slice(0,10))||'—'}</td>
+        <td><span class="tag">${esc(d.denial_category||'uncategorized')}</span></td>
+        <td class="small">${esc(d.denial_reason||'—')}</td>
+        <td style="text-align:right">${fmtMoney(r.denied)}</td>
+        <td class="small">${deadlineCell}</td>
+        <td class="small">${r.ageDays}d</td>
+        <td class="small">${esc(d.assigned_user||'Unassigned')}</td>
         <td>${statusBadge(d.status)}</td>
         <td>${actions}</td>
       </tr>`;
     });
-    $el('den-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No denials found.</td></tr>';
+    $el('den-table-body').innerHTML = tb || '';
+    $el('den-empty').style.display = filtered.length ? 'none':'block';
   }catch(e){ alert('Error loading denials: '+e.message); }
+}
+function denClearFilters(){
+  ['den-search','den-filter-status','den-filter-priority','den-filter-category'].forEach(id=>{const e=$el(id); if(e) e.value='';});
+  denList();
 }
 async function denView(id){
   try{
