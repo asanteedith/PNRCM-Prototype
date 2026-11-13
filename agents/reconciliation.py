@@ -328,6 +328,15 @@ def match_payment(
     cld = dict(claim)
     payd = dict(payment)
 
+    # Prevent a payment being reconciled to more than one claim (invariant 8)
+    already = c.execute(
+        "SELECT id, claim_id FROM payment_matches WHERE payment_id=?",
+        (payment_id,),
+    ).fetchone()
+    if already and already["claim_id"] != cld["id"]:
+        c.close()
+        return {"error": "Payment is already matched to a different claim"}, 400
+
     # Idempotency: existing match for this claim+payment
     existing = c.execute(
         "SELECT id FROM payment_matches WHERE claim_id=? AND payment_id=?",
@@ -729,6 +738,18 @@ def record_simulated_payment(
           previous_state=None, new_state=payment_status,
           input_summary=json.dumps({"amount": amount, "method": method, "reference": reference}),
           output_summary=json.dumps({"payment_id": pay_id}))
+    # Reconcile claim paid_amount from confirmed payment records so the claim
+    # reflects actual money received (not just a payment row existing).
+    confirmed = c.execute(
+        "SELECT COALESCE(SUM(amount),0) s FROM payments WHERE claim_id=? AND status IN ('completed','confirmed')",
+        (cld["id"],),
+    ).fetchone()["s"]
+    new_paid = round(float(confirmed or 0), 2)
+    new_status = cld.get("status")
+    if new_paid >= float(cld.get("total_charges") or 0) and float(cld.get("total_charges") or 0) > 0:
+        new_status = "paid"
+    c.execute("UPDATE claims SET paid_amount=?, status=?, updated_at=? WHERE id=?",
+              (new_paid, new_status, now(), cld["id"]))
     c.commit()
     row = c.execute("SELECT * FROM payments WHERE id=?", (pay_id,)).fetchone()
     c.close()

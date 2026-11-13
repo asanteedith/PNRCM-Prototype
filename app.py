@@ -2047,7 +2047,7 @@ def simulated_payment_route():
         c.commit(); c.close()
     except Exception:
         pass
-    return jsonify(result)
+    return (jsonify(result[0]), result[1]) if isinstance(result, tuple) else jsonify(result)
 
 @app.get("/api/reports/reconciliation.csv")
 def report_reconciliation_route():
