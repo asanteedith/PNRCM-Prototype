@@ -138,6 +138,17 @@ def generate_bill(encounter_id: str) -> Dict[str, Any]:
 
     status = "pending_review" if issues else "draft"
     c.execute("UPDATE bills SET status=?, updated_at=? WHERE id=?", (status, now(), bid))
+
+    # Persist line items from the billed services (transactional, replace any prior lines)
+    # so bill totals always reconcile with an itemised breakdown.
+    c.execute("DELETE FROM bill_line_items WHERE bill_id=?", (bid,))
+    for i, svc in enumerate(service_list, start=1):
+        c.execute(
+            """INSERT INTO bill_line_items(id, bill_id, service_id, line_code, description, amount, created_at)
+            VALUES(?,?,?,?,?,?,?)""",
+            (str(uuid.uuid4()), bid, svc["id"], f"L{i:03d}", svc["service_name"], float(svc["total_price"] or 0), now()),
+        )
+
     audit(
         c,
         "Billing Agent",

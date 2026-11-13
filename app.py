@@ -417,11 +417,43 @@ def create_bill():
     subtotal = float(data.get("subtotal", 0) or 0)
     tax = float(data.get("tax", 0) or 0)
     discount = float(data.get("discount", 0) or 0)
+
+    # Build line items so the bill always has an itemised breakdown that reconciles
+    # with the bill total. Priority: explicit line_items > encounter services > one
+    # transparent summary line (never fabricated silently).
+    line_items = []
+    if isinstance(data.get("line_items"), list) and data["line_items"]:
+        for i, li in enumerate(data["line_items"], start=1):
+            line_items.append({
+                "line_code": li.get("line_code") or f"L{i:03d}",
+                "description": li.get("description") or li.get("service_name") or "Charge",
+                "amount": float(li.get("amount") or 0),
+                "service_id": li.get("service_id"),
+            })
+    else:
+        # Capture the encounter's services as charges (regardless of prior billed flag)
+        svcs = c.execute("SELECT id, service_name, total_price FROM services WHERE encounter_id=? ORDER BY created_at", (enc["id"],)).fetchall()
+        if svcs:
+            for i, s in enumerate(svcs, start=1):
+                line_items.append({"line_code": f"L{i:03d}", "description": s["service_name"], "amount": float(s["total_price"] or 0), "service_id": s["id"]})
+            subtotal = round(sum(li["amount"] for li in line_items), 2)
+        elif subtotal > 0:
+            # No itemised services, but a total was supplied: record one explicit summary line
+            line_items.append({"line_code": "L001", "description": "Summary charge (no itemised services)", "amount": subtotal, "service_id": None})
+
     total = subtotal + tax - discount
     c.execute(
         "INSERT INTO bills(id, bill_number, encounter_id, patient_id, subtotal, tax, discount, total, paid, outstanding, status, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,0,?, 'draft', ?, ?)",
         (bid, bill_number, enc["id"], pat["id"], subtotal, tax, discount, total, total, now(), now()),
     )
+    # Persist line items transactionally with the bill
+    for li in line_items:
+        c.execute(
+            "INSERT INTO bill_line_items(id, bill_id, service_id, line_code, description, amount, created_at) VALUES(?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), bid, li["service_id"], li["line_code"], li["description"], li["amount"], now()),
+        )
+    # Mark the encounter's captured services as billed (charge capture) to prevent double billing
+    c.execute("UPDATE services SET billed=1 WHERE encounter_id=?", (enc["id"],))
     audit(c, "Billing Agent", "agent", "Billing", "Bill created", "bill", bid, new_state="draft")
     c.commit()
     row = c.execute("SELECT * FROM bills WHERE id=?", (bid,)).fetchone()
