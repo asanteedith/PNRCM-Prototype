@@ -6,13 +6,17 @@ Provides:
 - Session access logging
 - Sensitive action authorization
 - Audit trail integration
+- In-memory rate limiting for sensitive endpoints
+- Security response headers
+- Configuration validation
 
 No regulatory compliance claims are made. This is a demo prototype.
 """
 from __future__ import annotations
 
-import functools, uuid
+import functools, uuid, os, time, threading
 from typing import Any, Callable, Optional
+from collections import defaultdict, deque
 from flask import request, jsonify, g
 from db import get_db, now, audit
 
@@ -282,3 +286,95 @@ def is_demo_data() -> bool:
     """Return True if the current database is the demo database (not a real facility)."""
     from db import DB
     return "pnrcm_demo" in DB.lower()
+
+
+# ---------------------------------------------------------------------------
+# Configuration validation
+# ---------------------------------------------------------------------------
+def validate_config() -> dict:
+    """Validate required/optional configuration. Returns a status dict.
+
+    - SECRET_KEY: required in secure mode (no default allowed).
+    - PNRCM_SECURE_MODE: demo (default) vs secure.
+    """
+    secure = str(os.environ.get("PNRCM_SECURE_MODE", "")).lower() in ("1", "true", "yes")
+    secret = os.environ.get("PNRCM_SECRET_KEY", "")
+    issues = []
+    if secure and not secret:
+        issues.append("PNRCM_SECRET_KEY is required when PNRCM_SECURE_MODE is enabled")
+    if not secure and not secret:
+        # demo mode: generate an ephemeral secret, warn
+        issues.append("PNRCM_SECRET_KEY not set (demo mode: ephemeral secret in use)")
+    return {"secure_mode": secure, "secret_configured": bool(secret), "issues": issues}
+
+
+# ---------------------------------------------------------------------------
+# In-memory rate limiting (single-process; per-IP sliding window)
+# ---------------------------------------------------------------------------
+_rate_buckets: dict = defaultdict(deque)
+_rate_lock = threading.Lock()
+
+# Default limits: (max_requests, window_seconds) by endpoint class
+RATE_LIMITS = {
+    "default": (240, 60),       # 240 req/min general
+    "export": (30, 60),         # 30 exports/min
+    "analytics": (120, 60),     # 120 analytics/min
+    "auth": (20, 60),           # 20 auth attempts/min
+}
+
+
+def _rate_class(path: str) -> str:
+    if path.startswith("/api/auth") or path.startswith("/api/login") or path.startswith("/api/users"):
+        return "auth"
+    if path.endswith(".csv") or "/export" in path:
+        return "export"
+    if "/analytics" in path or "/financial-analytics" in path:
+        return "analytics"
+    return "default"
+
+
+def check_rate_limit(client_ip: str, path: str) -> tuple:
+    """Return (allowed: bool, retry_after_seconds: int). Sliding window per IP+class."""
+    cls = _rate_class(path)
+    limit, window = RATE_LIMITS.get(cls, RATE_LIMITS["default"])
+    # allow disabling via env for load tests
+    if str(os.environ.get("PNRCM_RATE_LIMIT", "1")).lower() in ("0", "false", "no"):
+        return True, 0
+    key = f"{client_ip}:{cls}"
+    now = time.time()
+    with _rate_lock:
+        dq = _rate_buckets[key]
+        while dq and dq[0] <= now - window:
+            dq.popleft()
+        if len(dq) >= limit:
+            retry = int(window - (now - dq[0])) + 1
+            return False, max(1, retry)
+        dq.append(now)
+    return True, 0
+
+
+# ---------------------------------------------------------------------------
+# Security response headers
+# ---------------------------------------------------------------------------
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "X-Permitted-Cross-Domain-Policies": "none",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+}
+
+
+def apply_security_headers(response):
+    for k, v in SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    return response

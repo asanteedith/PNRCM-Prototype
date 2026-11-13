@@ -43,6 +43,13 @@ AGENTS = [
 STAGES = ["Registration", "Encounter", "Documentation", "Service delivery", "Charge capture", "Billing", "Payment / claims", "Reconciliation"]
 
 db.init_db()
+# Validate configuration (warns if SECRET_KEY missing in secure mode)
+try:
+    _cfg = security.validate_config()
+    if _cfg["issues"]:
+        app.logger.warning("Configuration: %s", "; ".join(_cfg["issues"]))
+except Exception:
+    pass
 # Initialize persistent agent states for all registered agents
 c = get_db()
 orch._init_agent_states_db(c)
@@ -2876,6 +2883,14 @@ def _security_logging():
                 required=sorted(required) if required else None,
                 current_role=role,
             ), 403
+    # Rate limiting for sensitive endpoints (per-IP sliding window)
+    if request.path.startswith("/api/"):
+        ok, retry = security.check_rate_limit(request.remote_addr or "unknown", request.path)
+        if not ok:
+            resp = jsonify(error="Too many requests. Please slow down and retry.", retry_after=retry)
+            resp.status_code = 429
+            resp.headers["Retry-After"] = str(retry)
+            return resp
 
 
 @app.errorhandler(404)
@@ -2917,7 +2932,8 @@ def auth_me():
 
 @app.after_request
 def _security_after_request(response):
-    """Log access events for mutating requests."""
+    """Apply security headers and log access events for mutating requests."""
+    security.apply_security_headers(response)
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         try:
             path = request.path
