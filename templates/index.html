@@ -1618,9 +1618,14 @@ async function arList(){
   }catch(e){ alert('Error loading A/R: '+e.message); }
 }
 async function arAction(id){
-  const action = prompt('Action (follow_up/escalate/resolve):')||'';
-  if(!action) return;
-  alert(`AR action '${action}' recorded for claim ${id}.`);
+  // Persist a real follow-up task (idempotent via ensure_followup) then log an attempt
+  try{
+    const r = await api('/api/followups/ensure',{method:'POST',body:{claim_id:id,assigned_staff:'Unassigned',priority:'medium'}});
+    const fid = r.id || r.followup_id;
+    if(fid){ await api('/api/followups/'+encodeURIComponent(fid)+'/attempt',{method:'POST',body:{channel:'phone',note:'AR follow-up logged',attempted_by:'User'}}).catch(()=>{}); }
+    alert('Follow-up recorded for claim '+(id||'').slice(0,8)+'.');
+    arList();
+  }catch(e){ alert('Follow-up failed: '+e.message); }
 }
 
 /* ================================================================
