@@ -1396,18 +1396,22 @@ async function clmprepList(){
       const issues = [];
       if(!c.diagnosis_codes) issues.push('Missing diagnosis codes');
       if(!c.procedure_codes) issues.push('Missing procedure codes');
+      if(!c.payer_name && !c.payer_type) issues.push('Missing payer details');
       if(!c.expected_reimbursement || c.expected_reimbursement<=0) issues.push('No expected reimbursement');
-      if(c.denial_reason) issues.push('Previous denial: '+c.denial_reason);
+      if(c.denial_reason) issues.push('Prior denial: '+c.denial_reason);
+      if(!c.total_charges || c.total_charges<=0) issues.push('Invalid charge total');
       const readiness = issues.length===0?'Ready':(issues.length<=2?'Needs Review':'Not Ready');
+      const severity = issues.length===0?'approved':(issues.length<=2?'pending':'rejected');
+      const summary = issues.length===0 ? 'No issues' : (issues.length<=2 ? esc(issues.join('; ')) : esc(issues.slice(0,2).join('; '))+` +${issues.length-2} more`);
       tb+=`<tr onclick="clmPrepOpen('${esc(c.id)}')">
         <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
-        <td><span class="mono">${esc(c.encounter_id||'—')}</span></td>
+        <td><span class="mono small">${ref('ENC', c.encounter_id)}</span></td>
         <td>${esc(c.payer_name||c.payer_type||'—')}</td>
         <td>${fmtMoney(c.total_charges)}</td>
         <td>${statusBadge(c.status)}</td>
-        <td>${issues.length}</td>
-        <td><span class="tag ${readiness==='Ready'?'approved':(readiness==='Needs Review'?'pending':'rejected')}">${readiness}</span></td>
-        <td><button class="btn sm" onclick="clmScrub('${esc(c.id)}')">Scrub</button></td>
+        <td class="small" style="max-width:220px">${summary}</td>
+        <td><span class="tag ${severity}">${readiness}</span></td>
+        <td><button class="btn sm" onclick="event.stopPropagation(); clmScrub('${esc(c.id)}')">Scrub</button></td>
       </tr>`;
     });
     $el('clmprep-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No claims found.</td></tr>';
@@ -1419,7 +1423,33 @@ async function clmPrepOpen(id){
 async function clmScrub(id){
   try{
     const r = await api('/api/claims/'+encodeURIComponent(id)+'/standards',{method:'POST'});
-    alert(`Scrubbing complete.\\nStatus: ${r.vetting_status||'unknown'}\\nIssues found: ${r.issue_count||0}`);
+    const status = r.overall_status||'UNKNOWN';
+    const triggered = r.rules_triggered||[];
+    let html = `<div style="margin-bottom:10px">
+      <div>Claim: <span class="mono">${esc(r.claim_number||id)}</span></div>
+      <div>Overall result: ${statusBadge(status)}</div>
+      <div class="small" style="color:var(--muted)">${esc(r.simulation_notice||'')}</div>
+    </div>`;
+    if(triggered.length===0){
+      html += '<div class="empty">No validation issues found. This claim passes all active simulation rules.</div>';
+    } else {
+      html += '<div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin:8px 0 4px">Validation Findings</div>';
+      html += '<table class="data" style="font-size:10px"><thead><tr><th>Severity</th><th>Rule</th><th>Finding</th><th>Recommended Correction</th></tr></thead><tbody>';
+      const rec = {
+        required_field: 'Complete the missing required field(s) before submission.',
+        consistency: 'Reconcile claim data with the encounter record.',
+        duplicate: 'Review and remove the duplicate claim or merge with the existing one.',
+        value_range: 'Correct the charge total or bill the outstanding services.',
+      };
+      triggered.forEach(t=>{
+        html += `<tr><td>${statusBadge(t.severity)}</td><td>${esc(t.rule_name)}</td><td class="small">${esc(t.triggered_detail||'')}</td><td class="small">${esc(rec[t.rule_type]||'Review and correct.')}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    html += '<div style="margin-top:10px"><button class="btn sm" onclick="hideModal(\'modal-enc\')">Close</button></div>';
+    $el('enc-modal-body').innerHTML = html;
+    $el('enc-modal-title').textContent = 'Claim Scrub Result';
+    $el('modal-enc').classList.add('open');
     clmprepList();
   }catch(e){ alert('Scrub failed: '+e.message); }
 }
@@ -2937,17 +2967,67 @@ async function encSelect(id, encNo){
     const enc = wf.encounter||{};
     const services = wf.services||[];
     const transitions = wf.transitions||[];
-    const totalCharges = services.reduce((s,x)=>s+parseFloat(x.total_price||0),0);
-    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Encounter</td><td>${esc(enc.encounter_id)}</td></tr><tr><td>Patient</td><td>${esc(enc.patient_name)}</td></tr><tr><td>Department</td><td>${esc(enc.department||'—')}</td></tr><tr><td>Type</td><td>${esc(enc.encounter_type)}</td></tr><tr><td>Status</td><td>${statusBadge(enc.status)}</td></tr><tr><td>Documentation</td><td>${enc.documentation_complete?'Complete':'Incomplete'}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(totalCharges)}</td></tr></table>`;
-    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Lifecycle Steps</div><div style="display:flex;gap:4px;margin-bottom:10px">`;
-    const steps=['Registration','Eligibility','Clinical','Documentation','Charge Capture','Billing','Claims Submission','Payment','Reconciliation','Closure'];
-    steps.forEach((s,idx)=>{
-      const done = enc.status==='completed' || (wf.steps||[]).find(x=>x.step_name===s);
-      html+=`<span style="font-size:9px;padding:2px 6px;border:1px solid var(--line);background:${done?'#e7f2ea':'#fafbfc'};color:${done?'#1d6b3f':'#5a6b78'}">${esc(s)}</span>`;
+    // Enrich with bills/claims/reconciliations for this encounter
+    let bills=[], claims=[], recs=[];
+    try{ const all=await api('/api/bills'); bills=(all||[]).filter(b=>b.encounter_id===enc.id||b.encounter_id===enc.encounter_id); }catch(e){}
+    try{ const all=await api('/api/claims'); claims=(all||[]).filter(c=>c.encounter_id===enc.id||c.encounter_id===enc.encounter_id); }catch(e){}
+    try{ const all=await api('/api/reconciliations'); recs=(all||[]).filter(r=>claims.some(c=>c.id===r.claim_id)); }catch(e){}
+    const svcTotal = services.reduce((s,x)=>s+parseFloat(x.total_price||0),0);
+    const totalCharges = svcTotal;
+    // Derive lifecycle completion from actual persisted data
+    const reached = new Set((transitions||[]).map(t=>t.to_status).filter(Boolean));
+    const hasBill = bills.length>0;
+    const hasClaim = claims.length>0;
+    const hasRec = recs.length>0;
+    const docComplete = !!enc.documentation_complete;
+    const status = enc.status||'';
+    const stageDefs = [
+      {name:'Registration', done:true, note:'Encounter created'},
+      {name:'Eligibility', done: !!(enc.insurance_type||enc.payer_type), note: (enc.insurance_type||enc.payer_type)?'Payer on file':'Payer not recorded'},
+      {name:'Clinical', done: ['consultation','diagnostics','treatment','billing','payment','claims','completed'].includes(status)||reached.has('consultation')||reached.has('diagnostics')||reached.has('treatment'), note: 'Clinical care'},
+      {name:'Documentation', done: docComplete, note: docComplete?'Complete':'Incomplete'},
+      {name:'Charge Capture', done: services.length>0 && svcTotal>0, note: services.length? (svcTotal>0?('GHS '+svcTotal.toFixed(2)):'Services present but zero charge') : 'No services recorded'},
+      {name:'Billing', done: hasBill || ['billing','payment','claims','completed'].includes(status), note: hasBill?('Bill '+ (bills[0].bill_number||'')) : 'No bill yet'},
+      {name:'Claims Submission', done: hasClaim, note: hasClaim?('Claim '+(claims[0].claim_number||'')) : 'No claim yet'},
+      {name:'Payment', done: claims.some(c=>parseFloat(c.paid_amount||0)>0) || status==='completed', note: claims.some(c=>parseFloat(c.paid_amount||0)>0)?'Payment recorded':'No payment yet'},
+      {name:'Reconciliation', done: hasRec, note: hasRec?'Reconciled':'Not reconciled'},
+      {name:'Closure', done: status==='completed', note: status==='completed'?'Closed':'Open'},
+    ];
+    const currentIdx = stageDefs.findIndex(s=>!s.done);
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Encounter</td><td><span class="mono">${esc(enc.encounter_id)}</span></td></tr><tr><td>Patient</td><td>${esc(enc.patient_name||'')}</td></tr><tr><td>Department</td><td>${esc(enc.department||'—')}</td></tr><tr><td>Type</td><td>${esc(enc.encounter_type||'—')}</td></tr><tr><td>Status</td><td>${statusBadge(enc.status)}</td></tr><tr><td>Documentation</td><td>${docComplete?'<span class="status approved">Complete</span>':'<span class="status needs-review">Incomplete</span>'}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(totalCharges)}</td></tr></table>`;
+    // Zero-charge explanation
+    if(svcTotal===0){
+      html+=`<div class="notice" style="margin-bottom:10px"><strong>Zero charges:</strong> ${services.length? 'This encounter has services recorded but their charge total is zero (charge capture incomplete).':'No services have been captured for this encounter yet.'} ${docComplete?'':'Documentation is incomplete, which may block billing and claim submission.'}</div>`;
+    }
+    // Lifecycle visualization
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:6px">Encounter Lifecycle</div>`;
+    html+=`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">`;
+    stageDefs.forEach((s,idx)=>{
+      let bg='#fafbfc', fg='#5a6b78', icon='○';
+      if(s.done){ bg='#e7f2ea'; fg='#1d6b3f'; icon='✓'; }
+      else if(idx===currentIdx){ bg='#fff4e5'; fg='#a86500'; icon='●'; }
+      const isNext = idx===currentIdx;
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:${bg};color:${fg}">
+        <span style="width:14px">${icon}</span>
+        <span style="min-width:110px;font-weight:${isNext?'600':'400'}">${esc(s.name)}${isNext?' (next)':''}</span>
+        <span class="small" style="color:var(--muted)">${esc(s.note)}</span>
+      </div>`;
     });
-    html+=`</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Transitions</div><table class="data" style="margin-bottom:0">`;
+    html+=`</div>`;
+    // Next required action
+    if(currentIdx>=0){
+      const nx=stageDefs[currentIdx];
+      html+=`<div class="card" style="margin-bottom:10px"><div class="card-title">Next Required Action</div><div class="small">Complete <strong>${esc(nx.name)}</strong> &mdash; ${esc(nx.note)}.</div></div>`;
+    } else {
+      html+=`<div class="card" style="margin-bottom:10px"><div class="card-title">Lifecycle</div><div class="small">All stages complete.</div></div>`;
+    }
+    // Documentation link to review
+    if(!docComplete){
+      html+=`<div style="margin-bottom:10px"><button class="btn sm" onclick="hideModal('modal-enc');showSection('documentation')">Go to Documentation Review &rarr;</button></div>`;
+    }
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Transitions</div><table class="data" style="margin-bottom:0">`;
     (transitions||[]).forEach(t=>{
-      html+=`<tr><td>${esc(t.from_status||'—')}</td><td>→</td><td><b>${esc(t.to_status)}</b></td><td class="small">${esc(t.actor||'')} • ${esc(t.note||'')}</td><td class="mono small">${esc(t.ts||'')}</td></tr>`;
+      html+=`<tr><td>${esc(t.from_status||'—')}</td><td>→</td><td><b>${esc(t.to_status)}</b></td><td class="small">${esc(t.actor||'')} • ${esc(t.note||'')}</td><td class="small mono">${fmtDateTime(t.ts||t.created_at)}</td></tr>`;
     });
     html+=`</table>`;
     $el('enc-modal-title').textContent='Encounter '+esc(encNo);
