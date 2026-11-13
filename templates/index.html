@@ -751,6 +751,7 @@
           <div class="section-toolbar" style="margin-bottom:10px">
             <span class="tag" style="padding:4px 8px">Financial Analytics &amp; Trends Agent</span>
             <button class="btn sm primary" onclick="anLoadTrends()">Run Analysis</button>
+            <button class="btn sm" onclick="anExportTrends()">Export CSV</button>
           </div>
           <div class="metric-strip" id="ant-kpis"></div>
           <div class="card" style="margin-top:12px">
@@ -2412,13 +2413,16 @@ async function anLoadTrends(){
       anKpi('Estimated Exposure', fmtMoney(lk.total_estimated_exposure||0),'Potential, not confirmed') +
       anKpi('Verified Recovered', fmtMoney(lk.total_verified_recovered_amount||0)) +
       anKpi('Overdue (90+)', fmtMoney((ar.buckets&&ar.buckets['90+']&&ar.buckets['90+'].amount)||0));
-    // insights
+    // insights (with drill-down to the relevant workspace)
+    const drillSection = {bills:'billing', claims:'claim-prep', denials:'denials', ar:'ar', leakage:'leakage-detection'};
     $el('ant-insights').innerHTML = (ins.insights||[]).map(i=>{
       const cls = i.severity==='high'?'rejected':(i.severity==='medium'?'needs-review':'approved');
+      const dd = i.drilldown ? drillSection[i.drilldown.type] : null;
       return `<div style="padding:8px;border:1px solid var(--line);border-radius:4px;margin-bottom:8px">
         <span class="status ${cls}">${esc(i.severity||'info')}</span> <strong>${esc(i.title)}</strong>
         <div class="small" style="margin-top:4px">${esc(i.detail)}</div>
-        ${i.next_action?`<div class="small" style="margin-top:3px"><b>Next:</b> ${esc(i.next_action)} ${i.owner?('<i>('+esc(i.owner)+')</i>'):''}</div>`:''}</div>`;
+        ${i.next_action?`<div class="small" style="margin-top:3px"><b>Next:</b> ${esc(i.next_action)} ${i.owner?('<i>('+esc(i.owner)+')</i>'):''}</div>`:''}
+        ${dd?`<button class="btn sm" style="margin-top:6px" onclick="showSection('${dd}')">View ${esc(i.drilldown.type)} records &rarr;</button>`:''}</div>`;
     }).join('') || '<div class="empty">No insights.</div>';
     // revenue trend
     $el('ant-revenue').innerHTML = (rt.months||[]).map(m=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(m.month)}</span><span>Billed ${fmtMoney(m.billed)} · Collected ${fmtMoney(m.collected)}</span></div>`).join('') || '<div class="empty">No data.</div>';
@@ -2443,6 +2447,12 @@ async function anLoadTrends(){
 
 function anKpi(label, value, sub){
   return `<div class="metric"><div class="label">${esc(label)}</div><div class="value">${value}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
+}
+
+async function anExportTrends(){
+  const start = ($el('an-start')||{}).value || '', end = ($el('an-end')||{}).value || '';
+  const qs = (start||end) ? ('?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)) : '';
+  window.location.href = API + '/api/financial-analytics/export.csv' + qs;
 }
 
 async function anRefresh(){

@@ -3110,42 +3110,121 @@ def review_tasks_resolve_enhanced_route(task_id):
 
 
 # ---------------- Financial Analytics & Trends Agent ----------------
+def _analytics_facility(c):
+    """Facility scope for analytics: the caller's facility, or None (admin/anonymous)."""
+    return _current_facility_id(c)
+
 @app.get("/api/financial-analytics/overview")
 def financial_analytics_overview_route():
     start = request.args.get("start"); end = request.args.get("end")
-    return jsonify(financial_analytics.run_full_analysis(start, end))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.run_full_analysis(start, end, facility_id=fac))
 
 @app.get("/api/financial-analytics/revenue-trends")
 def financial_analytics_revenue_route():
-    return jsonify(financial_analytics.revenue_trends(request.args.get("start"), request.args.get("end")))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.revenue_trends(request.args.get("start"), request.args.get("end"), fac))
 
 @app.get("/api/financial-analytics/payers")
 def financial_analytics_payers_route():
-    return jsonify(financial_analytics.payer_performance(request.args.get("start"), request.args.get("end")))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.payer_performance(request.args.get("start"), request.args.get("end"), fac))
 
 @app.get("/api/financial-analytics/claims-denials")
 def financial_analytics_claims_route():
-    return jsonify(financial_analytics.claims_denial_trends(request.args.get("start"), request.args.get("end")))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.claims_denial_trends(request.args.get("start"), request.args.get("end"), fac))
 
 @app.get("/api/financial-analytics/ar-aging")
 def financial_analytics_ar_route():
-    return jsonify(financial_analytics.ar_aging(request.args.get("start"), request.args.get("end")))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.ar_aging(request.args.get("start"), request.args.get("end"), fac))
 
 @app.get("/api/financial-analytics/leakage")
 def financial_analytics_leakage_route():
-    return jsonify(financial_analytics.leakage_trends(request.args.get("start"), request.args.get("end")))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.leakage_trends(request.args.get("start"), request.args.get("end"), fac))
 
 @app.get("/api/financial-analytics/forecast")
 def financial_analytics_forecast_route():
-    return jsonify(financial_analytics.forecast(int(request.args.get("months", 3))))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.forecast(int(request.args.get("months", 3)), fac))
 
 @app.get("/api/financial-analytics/anomalies")
 def financial_analytics_anomalies_route():
-    return jsonify(financial_analytics.anomalies())
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.anomalies(fac))
 
 @app.get("/api/financial-analytics/insights")
 def financial_analytics_insights_route():
-    return jsonify(financial_analytics.management_insights(request.args.get("start"), request.args.get("end")))
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    return jsonify(financial_analytics.management_insights(request.args.get("start"), request.args.get("end"), fac))
+
+@app.get("/api/financial-analytics/export.csv")
+def financial_analytics_export_route():
+    c = get_db(); fac = _analytics_facility(c); c.close()
+    start = request.args.get("start"); end = request.args.get("end")
+    rev = financial_analytics.revenue_trends(start, end, fac)
+    payer = financial_analytics.payer_performance(start, end, fac)
+    cd = financial_analytics.claims_denial_trends(start, end, fac)
+    ar = financial_analytics.ar_aging(start, end, fac)
+    lk = financial_analytics.leakage_trends(start, end, fac)
+    fc = financial_analytics.forecast(facility_id=fac)
+    an = financial_analytics.anomalies(fac)
+    lines = []
+    def _csv_safe(v):
+        s = "" if v is None else str(v)
+        # Prevent CSV formula injection
+        if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
+            s = "'" + s
+        if any(ch in s for ch in (',', '"', '\n')):
+            s = '"' + s.replace('"', '""') + '"'
+        return s
+    def row(cells):
+        lines.append(",".join(_csv_safe(x) for x in cells))
+    row(["PNRCM Financial Analytics Export", "currency=GHS"])
+    row(["Generated", datetime.datetime.now().isoformat(timespec="seconds")])
+    row(["Period start", start or "all", "Period end", end or "all"])
+    row(["Facility scope", fac or "all"])
+    row([])
+    row(["REVENUE TREND (month, billed, collected)"])
+    row(["month", "billed", "collected"])
+    for m in rev["months"]:
+        row([m["month"], m["billed"], m["collected"]])
+    row(["TOTAL", rev["total_billed"], rev["total_collected"]])
+    row([])
+    row(["PAYER PERFORMANCE"])
+    row(["payer", "claims_submitted", "claims_denied", "billed", "paid", "outstanding", "denial_rate_pct", "collection_rate_pct"])
+    for p in payer["payers"]:
+        row([p["payer"], p["claims_submitted"], p["claims_denied"], p["billed"], p["paid"], p["outstanding"], p["denial_rate_pct"], p["collection_rate_pct"]])
+    row([])
+    row(["CLAIMS & DENIALS (month, submitted, denied)"])
+    row(["month", "submitted", "denied"])
+    for m in cd["months"]:
+        row([m["month"], m["submitted"], m["denied"]])
+    row([])
+    row(["A/R AGING"])
+    row(["bucket", "amount", "count"])
+    for k, v in ar["buckets"].items():
+        row([k, v["amount"], v["count"]])
+    row([])
+    row(["REVENUE LEAKAGE (estimated vs confirmed vs recovered)"])
+    row(["category", "count", "estimated", "confirmed", "recovered"])
+    for c_ in lk["by_category"]:
+        row([c_["category"], c_["count"], c_["estimated"], c_["confirmed"], c_["recovered"]])
+    row([])
+    row(["FORECAST (ESTIMATE)", fc.get("supported"), fc.get("reason", "")])
+    if fc.get("supported"):
+        row(["step", "estimated_collected"])
+        for p in fc["forecast"]:
+            row([p["step"], p["estimated_collected"]])
+    row([])
+    row(["ANOMALIES"])
+    for f in an["flags"]:
+        row([f.get("type", ""), f.get("detail", "")])
+    content = "\n".join(lines)
+    return Response(content, mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=financial_analytics.csv"})
 
 # ---------------- Phase 6: Revenue Impact Tracking ----------------
 
