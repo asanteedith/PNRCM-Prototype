@@ -88,21 +88,31 @@ def required_roles_for(method: str, path: str):
     return None
 
 
+def _secure_mode() -> bool:
+    """Secure mode requires authenticated, known users. Demo mode (default) preserves
+    anonymous/unknown access for the synthetic demo environment."""
+    import os
+    return str(os.environ.get("PNRCM_SECURE_MODE", "")).lower() in ("1", "true", "yes")
+
+
 def check_permission(method: str, path: str):
     """Return (allowed: bool, required: set|None, role: str|None). Enforces RBAC when a user is identified."""
     username = _get_current_username()
-    if not username:
-        # No identified user: demo/anonymous mode -> allow (caller preserves demo)
-        return True, None, None
     allowed_roles = required_roles_for(method, path)
+    if not username:
+        # No identified user: secure mode rejects protected mutations; demo allows.
+        if _secure_mode() and allowed_roles is not None:
+            return False, allowed_roles, None
+        return True, None, None
     if allowed_roles is None:
         return True, None, None
     c = get_db()
     try:
         user = _get_user_role(c, username)
         if not user:
-            # Unknown/anonymous identity (e.g., demo 'User'): allow to preserve
-            # the synthetic demo environment and scripted validation harness.
+            # Unknown identity: secure mode rejects; demo mode allows.
+            if _secure_mode():
+                return False, allowed_roles, None
             return True, None, None
         role = user.get("role", "")
         if role not in allowed_roles:
