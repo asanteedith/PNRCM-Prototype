@@ -401,10 +401,24 @@ def add_service(eid):
 
 
 # ---------------- Bills ----------------
+def _current_facility_id(c):
+    """Return the authenticated user's facility_id, or None (admin/anonymous/demo)."""
+    username = security._get_current_username()
+    if not username:
+        return None
+    u = security._get_user_role(c, username)
+    if not u:
+        return None
+    return u.get("facility_id")
+
 @app.get("/api/bills")
 def list_bills():
     c = get_db()
-    rows = c.execute("SELECT * FROM bills ORDER BY created_at DESC").fetchall()
+    fac = _current_facility_id(c)
+    if fac:
+        rows = c.execute("SELECT * FROM bills WHERE facility_id=? ORDER BY created_at DESC", (fac,)).fetchall()
+    else:
+        rows = c.execute("SELECT * FROM bills ORDER BY created_at DESC").fetchall()
     c.close()
     return jsonify([dict(x) for x in rows])
 
@@ -416,7 +430,7 @@ def create_bill():
     if not encounter_id or not patient_id:
         return jsonify(error="encounter_id and patient_id are required"), 400
     c = get_db()
-    enc = c.execute("SELECT id, patient_id FROM encounters WHERE id=? OR encounter_id=?", (encounter_id, encounter_id)).fetchone()
+    enc = c.execute("SELECT id, patient_id, facility_id FROM encounters WHERE id=? OR encounter_id=?", (encounter_id, encounter_id)).fetchone()
     if not enc:
         c.close(); return jsonify(error="Encounter not found"), 404
     pat = c.execute("SELECT id FROM patients WHERE id=? OR patient_id=?", (patient_id, patient_id)).fetchone()
@@ -453,8 +467,8 @@ def create_bill():
 
     total = subtotal + tax - discount
     c.execute(
-        "INSERT INTO bills(id, bill_number, encounter_id, patient_id, subtotal, tax, discount, total, paid, outstanding, status, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,0,?, 'draft', ?, ?)",
-        (bid, bill_number, enc["id"], pat["id"], subtotal, tax, discount, total, total, now(), now()),
+        "INSERT INTO bills(id, bill_number, encounter_id, patient_id, facility_id, subtotal, tax, discount, total, paid, outstanding, status, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,0,?, 'draft', ?, ?)",
+        (bid, bill_number, enc["id"], pat["id"], enc["facility_id"] if "facility_id" in enc.keys() else None, subtotal, tax, discount, total, total, now(), now()),
     )
     # Persist line items transactionally with the bill
     for li in line_items:
@@ -705,7 +719,11 @@ def billing_to_claim_route(bid):
 @app.get("/api/claims")
 def list_claims():
     c = get_db()
-    rows = c.execute("SELECT * FROM claims ORDER BY created_at DESC").fetchall()
+    fac = _current_facility_id(c)
+    if fac:
+        rows = c.execute("SELECT * FROM claims WHERE facility_id=? ORDER BY created_at DESC", (fac,)).fetchall()
+    else:
+        rows = c.execute("SELECT * FROM claims ORDER BY created_at DESC").fetchall()
     c.close()
     return jsonify([dict(x) for x in rows])
 

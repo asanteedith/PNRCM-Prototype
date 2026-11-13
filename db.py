@@ -1224,6 +1224,32 @@ def init_db():
             BEGIN SELECT RAISE(ABORT, 'bill total must be non-negative'); END""")
     except Exception:
         pass
+    # ---- Facility isolation: add facility_id to financial entities + backfill ----
+    # Additive, safe migrations. Backfill from verified parent relationships only;
+    # records whose facility cannot be established remain NULL (not defaulted).
+    for _t in ("bills", "claims", "payments", "denials", "reconciliations",
+               "claim_followups", "patient_balances", "patient_payments"):
+        _ensure_col(c, _t, "facility_id", "TEXT")
+    # Backfill bills/claims from their encounter (encounters.facility_id)
+    try:
+        c.execute("UPDATE bills SET facility_id=(SELECT e.facility_id FROM encounters e WHERE e.id=bills.encounter_id) WHERE facility_id IS NULL")
+        c.execute("UPDATE claims SET facility_id=(SELECT e.facility_id FROM encounters e WHERE e.id=claims.encounter_id) WHERE facility_id IS NULL")
+        # payments/denials/reconciliations/followups from their claim
+        c.execute("UPDATE payments SET facility_id=(SELECT cl.facility_id FROM claims cl WHERE cl.id=payments.claim_id) WHERE facility_id IS NULL AND claim_id IS NOT NULL")
+        c.execute("UPDATE denials SET facility_id=(SELECT cl.facility_id FROM claims cl WHERE cl.id=denials.claim_id) WHERE facility_id IS NULL")
+        c.execute("UPDATE reconciliations SET facility_id=(SELECT cl.facility_id FROM claims cl WHERE cl.id=reconciliations.claim_id) WHERE facility_id IS NULL AND claim_id IS NOT NULL")
+        c.execute("UPDATE claim_followups SET facility_id=(SELECT cl.facility_id FROM claims cl WHERE cl.id=claim_followups.claim_id) WHERE facility_id IS NULL")
+        # patient financials from patient
+        c.execute("UPDATE patient_balances SET facility_id=(SELECT p.facility_id FROM patients p WHERE p.id=patient_balances.patient_id) WHERE facility_id IS NULL")
+        c.execute("UPDATE patient_payments SET facility_id=(SELECT p.facility_id FROM patients p WHERE p.id=patient_payments.patient_id) WHERE facility_id IS NULL")
+    except Exception:
+        pass
+    # Indexes for facility-scoped queries
+    for _t in ("bills", "claims", "payments", "denials", "reconciliations", "claim_followups"):
+        try:
+            c.execute(f"CREATE INDEX IF NOT EXISTS idx_{_t}_facility ON {_t}(facility_id)")
+        except Exception:
+            pass
     # Seed default user roles (Phase 7)
     if c.execute("SELECT COUNT(*) n FROM user_roles").fetchone()["n"] == 0:
         default_roles = [

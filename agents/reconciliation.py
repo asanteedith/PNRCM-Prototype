@@ -328,6 +328,13 @@ def match_payment(
     cld = dict(claim)
     payd = dict(payment)
 
+    # Prevent cross-facility matching (facility isolation)
+    claim_fac = cld.get("facility_id")
+    pay_fac = payd.get("facility_id")
+    if claim_fac and pay_fac and claim_fac != pay_fac:
+        c.close()
+        return {"error": "Cannot match a payment to a claim from a different facility"}, 400
+
     # Prevent a payment being reconciled to more than one claim (invariant 8)
     already = c.execute(
         "SELECT id, claim_id FROM payment_matches WHERE payment_id=?",
