@@ -1191,6 +1191,10 @@ def audit_list_route():
     for k in ("agent_name","entity_type","entity_id","workflow_id","actor"):
         v=request.args.get(k)
         if v: q+=f" AND {k}=?"; params.append(v)
+    # Facility scoping: non-admin users only see their facility's audit records
+    fac = _current_facility_id(c)
+    if fac:
+        q += " AND (facility_id=? OR facility_id IS NULL)"; params.append(fac)
     q+=" ORDER BY timestamp DESC LIMIT 500"
     rows=c.execute(q,params).fetchall(); c.close()
     return jsonify([dict(r) for r in rows])

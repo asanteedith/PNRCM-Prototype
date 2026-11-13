@@ -1556,13 +1556,30 @@ def init_db():
 def audit(c, actor, actor_type, agent_name, action, entity_type, entity_id,
           previous_state=None, new_state=None, recommendation=None, decision=None,
           execution_duration_ms=None, workflow_id=None, input_summary=None,
-          output_summary=None, exception=None, human_reviewer=None, review_decision=None):
+          output_summary=None, exception=None, human_reviewer=None, review_decision=None,
+          reason=None, facility_id=None):
     rid = str(uuid.uuid4())
     ts = now()
+    # Ensure audit_trail has the extended columns (safe additive migration)
+    for col, ddl in (("reason", "TEXT"), ("facility_id", "TEXT")):
+        try:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(audit_trail)").fetchall()]
+            if col not in cols:
+                c.execute(f"ALTER TABLE audit_trail ADD COLUMN {col} {ddl}")
+        except Exception:
+            pass
+    # Resolve facility from actor if not supplied
+    if facility_id is None and actor and actor_type == "user":
+        try:
+            row = c.execute("SELECT facility_id FROM user_roles WHERE username=? AND is_active=1", (actor,)).fetchone()
+            if row:
+                facility_id = row["facility_id"]
+        except Exception:
+            pass
     c.execute(
-        """INSERT INTO audit_trail(id, timestamp, actor, actor_type, agent_name, action, entity_type, entity_id, previous_state, new_state, recommendation, decision, execution_duration_ms, created_at, workflow_id, input_summary, output_summary, exception, human_reviewer, review_decision)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (rid, ts, actor, actor_type, agent_name, action, entity_type, entity_id, previous_state, new_state, recommendation, decision, execution_duration_ms, ts, workflow_id, input_summary, output_summary, exception, human_reviewer, review_decision)
+        """INSERT INTO audit_trail(id, timestamp, actor, actor_type, agent_name, action, entity_type, entity_id, previous_state, new_state, recommendation, decision, execution_duration_ms, created_at, workflow_id, input_summary, output_summary, exception, human_reviewer, review_decision, reason, facility_id)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (rid, ts, actor, actor_type, agent_name, action, entity_type, entity_id, previous_state, new_state, recommendation, decision, execution_duration_ms, ts, workflow_id, input_summary, output_summary, exception, human_reviewer, review_decision, reason, facility_id)
     )
     return rid
 
