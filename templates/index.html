@@ -493,7 +493,7 @@
           <button class="btn sm" onclick="denList()">Refresh</button>
         </div>
         <table class="data">
-          <thead><tr><th>Claim</th><th>Payer</th><th>Denied Amount</th><th>Category</th><th>Root Cause</th><th>Deadline</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Claim</th><th>Payer</th><th>Denied</th><th>Category</th><th>Recovered</th><th>Remaining</th><th>Age</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="den-table-body"></tbody>
         </table>
       </section>
@@ -1505,26 +1505,62 @@ async function doPayerResponse(claimId, type){
 async function denList(){
   try{
     const dens = await api('/api/denials');
+    const claims = await api('/api/claims');
+    const cMap = {}; (claims||[]).forEach(c=>cMap[c.id]=c);
     const f = $el('den-filter') ? $el('den-filter').value : '';
     let rows = (dens||[]).filter(d=>!f || d.status===f);
+    const now = Date.now();
     let tb='';
     rows.forEach(d=>{
+      const claim = cMap[d.claim_id] || {};
+      const denied = parseFloat(d.amount||claim.total_charges||0);
+      const recovered = parseFloat(claim.paid_amount||0);
+      const remaining = Math.max(0, denied - recovered);
+      const ageDays = Math.floor((now - new Date(d.created_at||d.denial_date||Date.now()).getTime())/86400000);
+      const ageLabel = ageDays<=0?'Today':(ageDays===1?'1 day':(ageDays>=30?ageDays+' days':ageDays+' days'));
+      const st = (d.status||'open').toLowerCase();
+      let actions = '';
+      if(st==='open' || st==='pending'){
+        actions = `<button class="btn sm" onclick="denResolve('${esc(d.id)}')">Resolve</button>
+          <button class="btn sm" onclick="clmAppeal('${esc(d.claim_id)}')">Appeal</button>`;
+      } else if(st==='resolved' || st==='closed'){
+        actions = `<button class="btn sm" onclick="denView('${esc(d.id)}')">View Details</button>`;
+      } else {
+        actions = `<button class="btn sm" onclick="denView('${esc(d.id)}')">View</button>`;
+      }
       tb+=`<tr>
-        <td><span class="mono">${esc(d.claim_id||'—')}</span></td>
+        <td><span class="mono small">${ref('CLM', d.claim_id)}</span></td>
         <td>${esc(d.payer_name||'—')}</td>
-        <td>${fmtMoney(d.amount||0)}</td>
-        <td><span class="tag">${esc(d.denial_category||d.denial_reason||'—')}</span></td>
-        <td class="small">${esc(d.denial_reason||'—')}</td>
-        <td>${esc(d.deadline||'—')}</td>
+        <td>${fmtMoney(denied)}</td>
+        <td class="small"><span class="tag">${esc(d.denial_category||d.denial_reason||'—')}</span></td>
+        <td>${fmtMoney(recovered)}</td>
+        <td>${fmtMoney(remaining)}</td>
+        <td class="small">${ageLabel}</td>
         <td>${statusBadge(d.status)}</td>
-        <td>
-          <button class="btn sm" onclick="denResolve('${esc(d.id)}')">Resolve</button>
-          ${d.status==='open'?`<button class="btn sm" onclick="clmAppeal('${esc(d.claim_id)}')">Appeal</button>`:''}
-        </td>
+        <td>${actions}</td>
       </tr>`;
     });
-    $el('den-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No denials found.</td></tr>';
+    $el('den-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No denials found.</td></tr>';
   }catch(e){ alert('Error loading denials: '+e.message); }
+}
+async function denView(id){
+  try{
+    const dens = await api('/api/denials');
+    const d = (dens||[]).find(x=>x.id===id);
+    if(!d){ alert('Denial not found'); return; }
+    const html = `<table style="margin-bottom:10px">
+      <tr><td style="width:150px">Claim</td><td><span class="mono">${ref('CLM', d.claim_id)}</span></td></tr>
+      <tr><td>Payer</td><td>${esc(d.payer_name||'—')}</td></tr>
+      <tr><td>Category</td><td>${esc(d.denial_category||'—')}</td></tr>
+      <tr><td>Reason</td><td>${esc(d.denial_reason||'—')}</td></tr>
+      <tr><td>Denied Amount</td><td>${fmtMoney(d.amount||d.total_charges)}</td></tr>
+      <tr><td>Status</td><td>${statusBadge(d.status)}</td></tr>
+      <tr><td>Denial Date</td><td>${fmtDate(d.denial_date)}</td></tr>
+    </table>`;
+    $el('enc-modal-body').innerHTML = html;
+    $el('enc-modal-title').textContent = 'Denial Detail';
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Failed: '+e.message); }
 }
 async function denResolve(id){
   const decision = prompt('Decision (approve/reject/escalate):')||'';
