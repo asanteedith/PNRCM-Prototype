@@ -1207,6 +1207,23 @@ def init_db():
     _ensure_col(c, "review_tasks", "decision_timestamp", "TEXT")
     _ensure_col(c, "review_tasks", "ai_recommendation", "TEXT")
     _ensure_col(c, "review_tasks", "financial_impact", "REAL")
+    # DB-level financial safeguard: reject negative payment / bill amounts.
+    # Additive triggers (safe for existing data; credits/overpayments are positive).
+    try:
+        c.execute("""CREATE TRIGGER IF NOT EXISTS payments_amount_nonneg
+            BEFORE INSERT ON payments FOR EACH ROW
+            WHEN NEW.amount < 0
+            BEGIN SELECT RAISE(ABORT, 'payment amount must be non-negative'); END""")
+        c.execute("""CREATE TRIGGER IF NOT EXISTS payments_amount_nonneg_upd
+            BEFORE UPDATE OF amount ON payments FOR EACH ROW
+            WHEN NEW.amount < 0
+            BEGIN SELECT RAISE(ABORT, 'payment amount must be non-negative'); END""")
+        c.execute("""CREATE TRIGGER IF NOT EXISTS bills_total_nonneg
+            BEFORE UPDATE OF total ON bills FOR EACH ROW
+            WHEN NEW.total < 0
+            BEGIN SELECT RAISE(ABORT, 'bill total must be non-negative'); END""")
+    except Exception:
+        pass
     # Seed default user roles (Phase 7)
     if c.execute("SELECT COUNT(*) n FROM user_roles").fetchone()["n"] == 0:
         default_roles = [
