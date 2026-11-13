@@ -3268,14 +3268,16 @@ async function docList(){
       const e = eMap[r.encounter_id];
       const findings = JSON.parse(r.findings||'[]');
       tb+=`<tr onclick="docOpen('${esc(r.id)}')">
-        <td><span class="mono">${esc(e?e.encounter_id:'—')}</span></td>
+        <td><span class="mono small">${e?ref('ENC',e.id):'—'}</span></td>
         <td>${e?esc(e.patient_name||'—'):'—'}</td>
         <td><span class="tag">${esc(e?e.department||'—':'—')}</span></td>
         <td>${findings.length} finding(s)</td>
-        <td>${esc(findings.length?findings[0].finding||findings[0].code:'None')}</td>
+        <td class="small">${esc(findings.length?findings[0].finding||findings[0].code:'None')}</td>
         <td>${r.human_review_required?'<span class="status pending">Required</span>':'<span class="status approved">Not required</span>'}</td>
         <td>${statusBadge(r.status)}</td>
-        <td><button class="btn sm">Review</button></td>
+        <td>${((r.status||'').toLowerCase()==='pending'||r.human_review_required)
+          ? `<button class="btn sm primary" onclick="event.stopPropagation();docOpen('${esc(r.id)}')">Review</button>`
+          : `<button class="btn sm" onclick="event.stopPropagation();docOpen('${esc(r.id)}')">View Details</button>`}</td>
       </tr>`;
     });
     $el('doc-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No documentation reviews.</td></tr>';
@@ -3339,14 +3341,16 @@ async function codeList(){
     rows.forEach(c=>{
       const e = eMap[c.encounter_id];
       tb+=`<tr onclick="codeOpen('${esc(c.id)}')">
-        <td><span class="mono">${esc(e?e.encounter_id:'—')}</span></td>
+        <td><span class="mono small">${e?ref('ENC',e.id):'—'}</span></td>
         <td><span class="tag">${esc(c.code_type||'—')}</span></td>
         <td><span class="mono">${esc(c.code_value||'—')}</span></td>
         <td>${esc(c.code_description||'—')}</td>
         <td>${Math.round((c.confidence||0)*100)}%</td>
         <td class="small">${esc(c.evidence||'—')}</td>
         <td>${statusBadge(c.status)}</td>
-        <td><button class="btn sm">Review</button></td>
+        <td>${(c.status||'').toLowerCase()==='pending_review'
+          ? `<button class="btn sm primary" onclick="event.stopPropagation();codeOpen('${esc(c.id)}')">Review</button>`
+          : `<button class="btn sm" onclick="event.stopPropagation();codeOpen('${esc(c.id)}')">View Details</button>`}</td>
       </tr>`;
     });
     $el('code-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No coding suggestions.</td></tr>';
