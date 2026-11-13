@@ -531,7 +531,7 @@
           <div class="metric"><div class="label">Awaiting Review</div><div class="value" id="pay-matches">0</div></div>
         </div>
         <table class="data">
-          <thead><tr><th>Payment</th><th>Method</th><th>Amount</th><th>Claim</th><th>Status</th><th>Reconciliation</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Payment</th><th>Method</th><th>Amount</th><th>Matched</th><th>Claim</th><th>Status</th><th>Reconciliation</th><th>Actions</th></tr></thead>
           <tbody id="pay-table-body"></tbody>
         </table>
       </section>
@@ -1592,29 +1592,62 @@ async function arAction(id){
    ================================================================ */
 async function payList(){
   try{
-    const pays = await api('/api/collections/payments');
+    const pays = await api('/api/payments');
     let tb='';
     let collected=0, unreconciled=0;
     (pays||[]).forEach(p=>{
       collected += parseFloat(p.amount||0);
-      if(p.reconciliation_status!=='reconciled') unreconciled += parseFloat(p.amount||0);
+      const rec = p.reconciliation_status||'unreconciled';
+      const hasMatch = !!p.match_id;
+      const matchedAmt = parseFloat(p.reconciled_amount||0);
+      const unmatched = parseFloat(p.unmatched_amount!=null?p.unmatched_amount:(p.amount||0));
+      if(!hasMatch) unreconciled += parseFloat(p.amount||0);
+      else if(rec!=='reconciled' && rec!=='matched') unreconciled += unmatched;
+      let action;
+      if(hasMatch) action = `<button class="btn sm" onclick="payViewMatch('${esc(p.id)}')">View Match</button>`;
+      else if(p.status && p.status!=='completed' && p.status!=='confirmed') action = `<span class="small" style="color:var(--muted)">${esc(p.status)}</span>`;
+      else action = `<button class="btn sm primary" onclick="payMatch('${esc(p.id)}')">Match</button>`;
+      const matchedCell = hasMatch ? (matchedAmt+' / '+fmtMoney(p.amount)) : '—';
       tb+=`<tr>
-        <td><span class="mono">${esc(p.id)}</span></td>
+        <td><span class="mono">${esc(p.reference||p.id.slice(0,12))}</span></td>
         <td>${esc(p.payment_method)}</td>
         <td>${fmtMoney(p.amount)}</td>
-        <td><span class="mono">${esc(p.claim_id||'—')}</span></td>
-        <td>${statusBadge(p.payment_status)}</td>
-        <td>${statusBadge(p.reconciliation_status)}</td>
-        <td><button class="btn sm" onclick="payMatch('${esc(p.id)}')">Match</button></td>
+        <td>${matchedCell}</td>
+        <td><span class="mono small">${p.claim_id?ref('CLM',p.claim_id):'—'}</span></td>
+        <td>${statusBadge(p.status)}</td>
+        <td>${statusBadge(rec)}</td>
+        <td>${action}</td>
       </tr>`;
     });
-    $el('pay-table-body').innerHTML = tb || '<tr><td colspan=7 class="empty">No payments found.</td></tr>';
+    $el('pay-table-body').innerHTML = tb || '<tr><td colspan=8 class="empty">No payments found. Record a simulated payment to begin reconciliation.</td></tr>';
     $el('pay-collected').textContent = fmtMoney(collected);
     $el('pay-unreconciled').textContent = fmtMoney(unreconciled);
-    const recs = await api('/api/reconciliations');
+    const recs = await api('/api/reconciliations').catch(()=>[]);
     const matches = (recs||[]).filter(r=>r.review_decision==='pending').length;
     $el('pay-matches').textContent = matches;
   }catch(e){ alert('Error loading payments: '+e.message); }
+}
+async function payViewMatch(pid){
+  try{
+    const pays = await api('/api/payments');
+    const p = (pays||[]).find(x=>x.id===pid);
+    if(!p){ alert('Payment not found'); return; }
+    let html=`<table style="margin-bottom:10px">
+      <tr><td style="width:160px">Payment Ref</td><td><span class="mono">${esc(p.reference||p.id)}</span></td></tr>
+      <tr><td>Amount</td><td>${fmtMoney(p.amount)}</td></tr>
+      <tr><td>Method</td><td>${esc(p.payment_method||'—')}</td></tr>
+      <tr><td>Source Claim</td><td><span class="mono">${p.claim_id?ref('CLM',p.claim_id):'—'}</span></td></tr>
+      <tr><td>Source Bill</td><td><span class="mono">${p.bill_id?ref('BILL',p.bill_id):'—'}</span></td></tr>
+      <tr><td>Payment Status</td><td>${statusBadge(p.status)}</td></tr>
+      <tr><td>Reconciliation</td><td>${statusBadge(p.reconciliation_status)}</td></tr>
+      <tr><td>Matched Amount</td><td>${fmtMoney(p.reconciled_amount)}</td></tr>
+      <tr><td>Unmatched</td><td>${fmtMoney(p.unmatched_amount)}</td></tr>
+      ${p.matched_at?`<tr><td>Matched At</td><td>${fmtDateTime(p.matched_at)}</td></tr>`:''}
+    </table>`;
+    $el('enc-modal-body').innerHTML = html;
+    $el('enc-modal-title').textContent = 'Payment / Reconciliation Detail';
+    $el('modal-enc').classList.add('open');
+  }catch(e){ alert('Failed: '+e.message); }
 }
 function paySimModal(){
   $el('pay-claim').value=''; $el('pay-amt').value=''; $el('pay-method').value='Cash'; $el('pay-ref').value=''; $el('pay-result').innerHTML='';

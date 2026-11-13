@@ -1920,9 +1920,27 @@ def reconciliation_get_route(claim_id):
 @app.get("/api/payments")
 def payments_list():
     c = get_db()
-    rows = c.execute("SELECT * FROM payments ORDER BY created_at DESC").fetchall()
+    rows = c.execute(
+        """SELECT p.*, m.id AS match_id, m.matched_amount, m.match_status,
+                  m.reconciliation_status, m.matched_at
+           FROM payments p
+           LEFT JOIN payment_matches m ON m.payment_id = p.id
+           ORDER BY p.created_at DESC"""
+    ).fetchall()
     c.close()
-    return jsonify([dict(x) for x in rows])
+    out = []
+    for x in rows:
+        d = dict(x)
+        # Derive a single reconciliation status for the UI
+        if not d.get("match_id"):
+            d["reconciliation_status"] = "unreconciled"
+            d["reconciled_amount"] = 0.0
+            d["unmatched_amount"] = float(d.get("amount") or 0)
+        else:
+            d["reconciled_amount"] = float(d.get("matched_amount") or 0)
+            d["unmatched_amount"] = round(float(d.get("amount") or 0) - d["reconciled_amount"], 2)
+        out.append(d)
+    return jsonify(out)
 
 @app.post("/api/payments/match")
 def payment_match_route():
