@@ -192,6 +192,47 @@
   .alert-item.low{border-left:3px solid var(--info)}
   .alert-item .alert-title{font-weight:700;font-size:11px;color:var(--ink)}
   .alert-item .alert-meta{font-size:9px;color:var(--muted);margin-top:2px}
+
+  /* ---- Phase 5 UI refinements (RCM-benchmark informed) ---- */
+  /* Sticky header + zebra for long worklists (scannability) */
+  .table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.data thead th{position:sticky;top:0;z-index:2}
+  table.data tbody tr:nth-child(even) td{background:#fafcfd}
+  table.data tbody tr:hover td{background:var(--accent-light)}
+  /* Sortable headers */
+  table.data th.sortable{cursor:pointer;user-select:none}
+  table.data th.sortable::after{content:"\2195";opacity:0.35;margin-left:4px;font-size:8px}
+  table.data th.sortable:hover::after{opacity:0.8}
+  table.data th.sort-asc::after{content:"\2191";opacity:1;color:var(--accent)}
+  table.data th.sort-desc::after{content:"\2193";opacity:1;color:var(--accent)}
+  /* Compact, clickable KPI cards with consistent hierarchy */
+  .metric{transition:box-shadow .12s,border-color .12s}
+  .metric.clickable{cursor:pointer}
+  .metric.clickable:hover{border-color:var(--accent);box-shadow:var(--shadow-lg)}
+  .metric .value{letter-spacing:-0.01em}
+  .metric .delta{font-size:9px;font-weight:600;margin-top:2px}
+  .metric .delta.up{color:var(--success)}
+  .metric .delta.down{color:var(--danger)}
+  /* Loading skeleton */
+  .skeleton{background:linear-gradient(90deg,#eef2f5 25%,#f6f9fb 37%,#eef2f5 63%);background-size:400% 100%;animation:shimmer 1.3s ease infinite;border-radius:var(--radius);color:transparent!important;min-height:14px}
+  @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+  /* Accessible focus + reduced motion */
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  @media(prefers-reduced-motion:reduce){*{animation-duration:0.001ms!important;transition-duration:0.001ms!important}}
+  /* Mobile sidebar toggle */
+  .sidebar-toggle{display:none;background:none;border:1px solid var(--line);border-radius:var(--radius);padding:4px 8px;font-size:14px;cursor:pointer}
+  @media(max-width:760px){
+    .sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow-lg)}
+    .sidebar.open{transform:translateX(0)}
+    .sidebar-toggle{display:inline-flex}
+    .canvas{padding:14px}
+    .metric{min-width:130px}
+    .metric-strip{gap:8px}
+    .topbar{padding:0 12px}
+    .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+  }
+  /* Slightly denser tables on large screens for high-volume worklists */
+  @media(min-width:1400px){table.data td{padding:5px 8px}table.data th{padding:5px 8px}}
 </style>
 </head>
 <body>
@@ -246,6 +287,7 @@
   <div class="main">
     <header class="topbar">
       <div class="topbar-left">
+        <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation">&#9776;</button>
         <div class="brand">PNRCM Revenue OS</div>
         <div class="env-tag">GHS &bull; Synthetic Demo</div>
         <div class="status-row"><span class="dot"></span>System online</div>
@@ -1206,8 +1248,42 @@ function showSection(id){
   if(id==='analytics') anRefresh();
   if(id==='ai-orchestrator') aiOrchestratorRefresh();
   if(id==='review') rvList();
+  setTimeout(initSortableTables, 60);
 }
 window.showSection=showSection;
+
+/* ---- Phase 5 UI helpers ---- */
+function toggleSidebar(){
+  const sb = document.querySelector('.sidebar');
+  if(sb) sb.classList.toggle('open');
+}
+// Generic sortable table headers: click a th.sortable to sort its table by that column
+function initSortableTables(){
+  document.querySelectorAll('table.data').forEach(tbl=>{
+    tbl.querySelectorAll('thead th').forEach((th, idx)=>{
+      if(th.dataset.sortBound) return;
+      th.dataset.sortBound = '1';
+      th.classList.add('sortable');
+      th.addEventListener('click', (e)=>{
+        if(e.target.closest('button,a,input,select')) return;
+        const tbody = tbl.tBodies[0]; if(!tbody) return;
+        const rows = Array.from(tbody.rows);
+        const dir = th.classList.contains('sort-asc') ? 'desc' : 'asc';
+        tbl.querySelectorAll('thead th').forEach(h=>h.classList.remove('sort-asc','sort-desc'));
+        th.classList.add(dir==='asc'?'sort-asc':'sort-desc');
+        const numeric = rows.every(r=>{ const t=r.cells[idx] ? r.cells[idx].textContent.replace(/[^0-9.\-]/g,'') : ''; return t!=='' && !isNaN(parseFloat(t)); });
+        rows.sort((a,b)=>{
+          let x = a.cells[idx] ? a.cells[idx].textContent.trim() : '';
+          let y = b.cells[idx] ? b.cells[idx].textContent.trim() : '';
+          if(numeric){ x = parseFloat(x.replace(/[^0-9.\-]/g,''))||0; y = parseFloat(y.replace(/[^0-9.\-]/g,''))||0; return dir==='asc'?x-y:y-x; }
+          return dir==='asc' ? x.localeCompare(y) : y.localeCompare(x);
+        });
+        rows.forEach(r=>tbody.appendChild(r));
+      });
+    });
+  });
+}
+window.toggleSidebar = toggleSidebar;
 
 function fmtMoney(n){
   if(n==null||n==='') return '—';
