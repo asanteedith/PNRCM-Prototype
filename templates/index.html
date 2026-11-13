@@ -316,39 +316,70 @@
           <button class="btn sm" onclick="seedData()">Rebuild Demo Data</button>
         </div>
 
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">Financial Position</div>
-            <span class="tag">Live &bull; /api/dashboard/overview</span>
+        <div class="card" style="padding:10px 14px">
+          <div class="metric-strip" id="cmd-financial" style="margin-bottom:0"></div>
+        </div>
+
+        <div class="grid-2" style="margin-top:12px">
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title">Revenue Performance &mdash; Billed vs Collected</div>
+              <span class="tag">Monthly</span>
+            </div>
+            <div id="cmd-chart-revenue"><div class="empty">Loading&#8230;</div></div>
           </div>
-          <div class="metric-strip" id="cmd-financial"></div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title">A/R Aging</div>
+              <span class="tag">Outstanding by age</span>
+            </div>
+            <div id="cmd-chart-ar"><div class="empty">Loading&#8230;</div></div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:12px">
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title">Claims Status</div>
+              <span class="tag">Distribution</span>
+            </div>
+            <div id="cmd-chart-claims"><div class="empty">Loading&#8230;</div></div>
+          </div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title">Denial Reasons (Pareto)</div>
+              <span class="tag">Top reasons</span>
+            </div>
+            <div id="cmd-chart-denials"><div class="empty">Loading&#8230;</div></div>
+          </div>
         </div>
 
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div class="card-title">Revenue At Risk</div>
-            <span class="tag">A/R &amp; leakage &bull; click to drill in</span>
+            <span class="tag">A/R, denials, leakage &bull; click to drill in</span>
           </div>
-          <div class="grid-4" id="cmd-stuck"></div>
+          <div id="cmd-stuck" style="display:flex;gap:0;flex-wrap:wrap"></div>
         </div>
 
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">Action Queue</div>
-            <span class="tag">Human review queue &bull; click to drill in</span>
+        <div class="grid-2" style="margin-top:12px">
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title">Action Queue</div>
+              <span class="tag">Human review queue</span>
+            </div>
+            <div id="cmd-actions"></div>
           </div>
-          <div class="grid-4" id="cmd-actions"></div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title">AI Agent Operations</div>
+              <span class="tag">Orchestrator</span>
+            </div>
+            <div id="cmd-ai-ops"></div>
+          </div>
         </div>
 
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div class="card-title">AI Agent Operations</div>
-            <span class="tag">Orchestrator &bull; click to drill in</span>
-          </div>
-          <div class="grid-4" id="cmd-ai-ops"></div>
-        </div>
-
-        <div class="grid-2" style="margin-top:14px">
+        <div class="grid-2" style="margin-top:12px">
           <div class="card">
             <div class="card-title">Recent Activity</div>
             <div id="command-activity" class="empty">Loading&#8230;</div>
@@ -1341,6 +1372,70 @@ function ref(prefix, id){
   const short = s.replace(/-/g,'').slice(-6).toUpperCase();
   return esc((prefix?prefix+'-':'') + short);
 }
+
+/* ================================================================
+   LIGHTWEIGHT SVG CHART HELPERS (no external dependency)
+   ================================================================ */
+const CHART_COLORS = ['#005e8a','#1e7a46','#8a5a00','#a33333','#2c6e8f','#6b4f8a'];
+function _chartEl(w,h){ return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="'+h+'" preserveAspectRatio="xMidYMid meet" role="img">'; }
+function fmtMoneyShort(n){
+  n = Number(n)||0;
+  if(Math.abs(n)>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(Math.abs(n)>=1000) return (n/1000).toFixed(1)+'k';
+  return String(Math.round(n));
+}
+function svgLineChart(series, labels, opts){
+  const W=640,H=240,padL=54,padR=12,padT=14,padB=26;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const allVals = series.flatMap(s=>s.values).filter(v=>v!=null && !isNaN(v));
+  const maxV = Math.max(1, ...allVals);
+  const n = Math.max(1, labels.length);
+  const x = i => padL + (n<=1 ? iw/2 : (i/(n-1))*iw);
+  const y = v => padT + ih - (v/maxV)*ih;
+  let g = _chartEl(W,H);
+  for(let i=0;i<=4;i++){ const gy=padT+(ih/4)*i; const val=maxV*(1-i/4);
+    g += '<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="#e7edf2"/>';
+    g += '<text x="'+(padL-6)+'" y="'+(gy+3)+'" font-size="9" fill="#8a97a3" text-anchor="end">'+fmtMoneyShort(val)+'</text>'; }
+  const step = Math.ceil(n/8);
+  labels.forEach((lb,i)=>{ if(i%step===0) g += '<text x="'+x(i)+'" y="'+(H-8)+'" font-size="9" fill="#8a97a3" text-anchor="middle">'+esc(lb)+'</text>'; });
+  series.forEach((s,si)=>{ const col=s.color||CHART_COLORS[si%CHART_COLORS.length];
+    let d=''; s.values.forEach((v,i)=>{ if(v==null||isNaN(v)) return; d += (d?'L':'M')+x(i)+' '+y(v)+' '; });
+    g += '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round"/>';
+    s.values.forEach((v,i)=>{ if(v==null||isNaN(v)) return; g += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="2.5" fill="'+col+'"><title>'+esc(labels[i])+': '+fmtMoney(v)+'</title></circle>'; }); });
+  g += '</svg>';
+  let legend='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:10px">';
+  series.forEach((s,si)=>{ const col=s.color||CHART_COLORS[si%CHART_COLORS.length]; legend += '<span><span style="display:inline-block;width:10px;height:10px;background:'+col+';border-radius:2px;margin-right:4px"></span>'+esc(s.name)+'</span>'; });
+  legend += '</div>';
+  return g + legend;
+}
+function svgBarChart(labels, values, opts){
+  opts = opts || {};
+  const W=640,H=220,padL=54,padR=12,padT=14,padB=26;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const maxV = Math.max(1, ...values.map(v=>v||0));
+  const n = Math.max(1, labels.length); const gap = iw/n; const bw = gap*0.62;
+  let g = _chartEl(W,H);
+  for(let i=0;i<=4;i++){ const gy=padT+(ih/4)*i; g += '<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="#e7edf2"/><text x="'+(padL-6)+'" y="'+(gy+3)+'" font-size="9" fill="#8a97a3" text-anchor="end">'+fmtMoneyShort(maxV*(1-i/4))+'</text>'; }
+  labels.forEach((lb,i)=>{ const v=values[i]||0; const bh=(v/maxV)*ih; const bx=padL+gap*i+(gap-bw)/2; const by=padT+ih-bh;
+    const col = opts.colors ? opts.colors[i%opts.colors.length] : CHART_COLORS[0];
+    g += '<rect x="'+bx+'" y="'+by+'" width="'+bw+'" height="'+bh+'" fill="'+col+'" rx="2"><title>'+esc(lb)+': '+fmtMoney(v)+'</title></rect>';
+    g += '<text x="'+(bx+bw/2)+'" y="'+(H-8)+'" font-size="9" fill="#8a97a3" text-anchor="middle">'+esc(lb)+'</text>'; });
+  g += '</svg>';
+  return g;
+}
+function svgHBars(items, opts){
+  if(!items.length) return '<div class="empty">No data.</div>';
+  const maxV = Math.max(1, ...items.map(x=>x.value||0));
+  let h = '<div style="display:flex;flex-direction:column;gap:6px">';
+  items.forEach((it,i)=>{ const col=it.color||CHART_COLORS[i%CHART_COLORS.length]; const pct=Math.max(2,(it.value/maxV)*100);
+    h += '<div style="display:flex;align-items:center;gap:8px">'
+      + '<span style="width:120px;font-size:10px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(it.label)+'">'+esc(it.label)+'</span>'
+      + '<span style="flex:1;background:#eef2f5;border-radius:3px;height:14px;position:relative;overflow:hidden"><span style="position:absolute;left:0;top:0;bottom:0;width:'+pct+'%;background:'+col+';border-radius:3px"></span></span>'
+      + '<span style="width:96px;text-align:right;font-size:10px;font-weight:600">'+(it.fmt?it.fmt(it.value):it.value)+'</span></div>'; });
+  h += '</div>';
+  return h;
+}
+
 function statusBadge(s){
   const k=(s||'').toString().toLowerCase();
   let cls='open';
@@ -3062,7 +3157,7 @@ async function cmdRefresh(){
     $el('cmd-financial').innerHTML=rows.map(([l,v])=>`<div class="metric"><div class="label">${esc(l)}</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-financial').innerHTML = `<div class="error">Error loading financials: ${esc(e.message)}</div>`; }
 
-  // Q2: Stuck Revenue
+  // Q2: Revenue At Risk (compact horizontal financial summary)
   try{
     const [claims, dens, lk] = await Promise.all([
       api('/api/claims').catch(()=>[]),
@@ -3070,7 +3165,7 @@ async function cmdRefresh(){
       api('/api/leakage').catch(()=>({items:[]}))
     ]);
     const arOutstanding = (claims||[]).reduce((s,c)=>s+(parseFloat(c.approved_amount||0)-parseFloat(c.paid_amount||0)),0);
-    const deniedAmount = (dens||[]).reduce((s,d)=>s+parseFloat(d.amount||0),0);
+    const deniedAmount = (dens||[]).reduce((s,d)=>s+parseFloat(d.amount||d.total_charges||0),0);
     const leakage = (lk&&lk.items)||[];
     const leakageTotal = leakage.reduce((s,i)=>s+parseFloat(i.amount||0),0);
     const unreconciled = parseFloat(k.unreconciled_payments||0);
@@ -3080,10 +3175,13 @@ async function cmdRefresh(){
       ['Unreconciled Payments', fmtMoney(unreconciled), 'payments'],
       ['Potential Leakage', fmtMoney(leakageTotal), 'leakage-detection'],
     ];
-    $el('cmd-stuck').innerHTML=stuck.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} →</div><div class="value">${v}</div></div>`).join('');
-  }catch(e){ $el('cmd-stuck').innerHTML = `<div class="error">Error loading stuck revenue: ${esc(e.message)}</div>`; }
+    $el('cmd-stuck').innerHTML = stuck.map(([l,v,sec])=>
+      `<div style="flex:1;min-width:150px;padding:10px 14px;border-right:1px solid var(--line);cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}">
+        <div class="label" style="font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">${esc(l)} &rarr;</div>
+        <div style="font-family:var(--font-serif);font-size:16px;font-weight:700;margin-top:2px">${v}</div></div>`).join('');
+  }catch(e){ $el('cmd-stuck').innerHTML = `<div class="error" style="padding:10px">Error: ${esc(e.message)}</div>`; }
 
-  // Q3: Required Actions
+  // Q3: Action Queue (structured table)
   try{
     const [iss, docs, codes, recs] = await Promise.all([
       api('/api/dashboard/issues').catch(()=>({exceptions:[],review_tasks:[]})),
@@ -3103,10 +3201,11 @@ async function cmdRefresh(){
       ['Coding Reviews', pendingCodes, 'coding'],
       ['Reconciliations Pending', pendingRecs, 'payments'],
     ];
-    $el('cmd-actions').innerHTML=actions.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} →</div><div class="value">${v}</div></div>`).join('');
-  }catch(e){ $el('cmd-actions').innerHTML = `<div class="error">Error loading actions: ${esc(e.message)}</div>`; }
+    $el('cmd-actions').innerHTML = '<table class="data"><tbody>' + actions.map(([l,v,sec])=>
+      `<tr style="cursor:pointer" onclick="showSection('${sec}')"><td>${esc(l)}</td><td style="text-align:right;font-weight:600">${v}</td><td style="text-align:right"><button class="btn sm" onclick="event.stopPropagation();showSection('${sec}')">Open &rarr;</button></td></tr>`).join('') + '</tbody></table>';
+  }catch(e){ $el('cmd-actions').innerHTML = `<div class="error" style="padding:10px">Error: ${esc(e.message)}</div>`; }
 
-  // Q4: AI Operations
+  // Q4: AI Agent Operations (compact table)
   try{
     const [st, m] = await Promise.all([
       api('/api/orchestrator/state').catch(()=>({agents:[]})),
@@ -3114,15 +3213,48 @@ async function cmdRefresh(){
     ]);
     const agents = (st&&st.agents)||[];
     const activeAgents = agents.filter(a=>a.status&&a.status.toLowerCase()!=='idle').length;
-    const aiOps = [
-      ['Total Agents', agents.length, 'ai-orchestrator'],
-      ['Active Agents', activeAgents, 'ai-orchestrator'],
-      ['Pending Tasks', m.pending||0, 'ai-orchestrator'],
-      ['Completed Tasks', m.completed||0, 'ai-orchestrator'],
-      ['Escalated', m.escalated||0, 'review'],
+    const rows = [
+      ['Total Agents', agents.length],
+      ['Active Agents', activeAgents],
+      ['Pending Tasks', m.pending||0],
+      ['Completed Tasks', m.completed||0],
+      ['Escalated', m.escalated||0],
     ];
-    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} →</div><div class="value">${v}</div></div>`).join('');
-  }catch(e){ $el('cmd-ai-ops').innerHTML = `<div class="error">Error loading AI ops: ${esc(e.message)}</div>`; }
+    $el('cmd-ai-ops').innerHTML = '<table class="data"><tbody>' + rows.map(([l,v])=>
+      `<tr><td>${esc(l)}</td><td style="text-align:right;font-weight:600">${v}</td></tr>`).join('') + '</tbody></table>';
+  }catch(e){ $el('cmd-ai-ops').innerHTML = `<div class="error" style="padding:10px">Error: ${esc(e.message)}</div>`; }
+
+  // Charts: revenue, AR aging, claims status, denial pareto
+  try{
+    const rev = await api('/api/financial-analytics/revenue-trends');
+    const months = rev.months||[];
+    if(months.length){
+      const series = [
+        {name:'Billed', color:'#005e8a', values: months.map(m=>m.billed)},
+        {name:'Collected', color:'#1e7a46', values: months.map(m=>m.collected)},
+      ];
+      $el('cmd-chart-revenue').innerHTML = svgLineChart(series, months.map(m=>m.month));
+    } else { $el('cmd-chart-revenue').innerHTML = '<div class="empty">No revenue history yet.</div>'; }
+  }catch(e){ $el('cmd-chart-revenue').innerHTML = '<div class="empty">Chart unavailable.</div>'; }
+  try{
+    const ar = await api('/api/financial-analytics/ar-aging');
+    const b = ar.buckets||{};
+    const labels = ['0-30','31-60','61-90','90+']; const vals = labels.map(l=>(b[l]||{}).amount||0);
+    const colors = ['#1e7a46','#2c6e8f','#8a5a00','#a33333'];
+    $el('cmd-chart-ar').innerHTML = svgBarChart(labels, vals, {colors});
+  }catch(e){ $el('cmd-chart-ar').innerHTML = '<div class="empty">Chart unavailable.</div>'; }
+  try{
+    const cl = await api('/api/analytics/claims');
+    const dist = cl.status_distribution||{};
+    const labels = Object.keys(dist); const vals = labels.map(l=>dist[l]);
+    if(labels.length) $el('cmd-chart-claims').innerHTML = svgBarChart(labels, vals, {colors:['#005e8a','#2c6e8f','#1e7a46','#8a5a00','#a33333','#6b4f8a']});
+    else $el('cmd-chart-claims').innerHTML = '<div class="empty">No claims.</div>';
+  }catch(e){ $el('cmd-chart-claims').innerHTML = '<div class="empty">Chart unavailable.</div>'; }
+  try{
+    const cd = await api('/api/financial-analytics/claims-denials');
+    const reasons = (cd.recurring_denial_reasons||[]).slice(0,6).map(r=>({label:r.reason, value:r.count, fmt:v=>v}));
+    $el('cmd-chart-denials').innerHTML = reasons.length ? svgHBars(reasons) : '<div class="empty">No denial reasons recorded.</div>';
+  }catch(e){ $el('cmd-chart-denials').innerHTML = '<div class="empty">Chart unavailable.</div>'; }
 
   // Recent Activity
   try{
