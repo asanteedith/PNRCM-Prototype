@@ -2885,10 +2885,11 @@ function demoGotoScreen(screen){
    A. COMMAND CENTER
    ================================================================ */
 async function cmdRefresh(){
+  let k = {};
   // Q1: Financial Status
   try{
     const ov = await api('/api/dashboard/overview');
-    const k = ov.kpis||{};
+    k = ov.kpis||{};
     const totalCharges = parseFloat(k.total_charges||0);
     const totalCollected = parseFloat(k.total_collected||0);
     const collectionRate = totalCharges>0 ? Math.round((totalCollected/totalCharges)*100) : 0;
@@ -2915,7 +2916,7 @@ async function cmdRefresh(){
     const deniedAmount = (dens||[]).reduce((s,d)=>s+parseFloat(d.amount||0),0);
     const leakage = (lk&&lk.items)||[];
     const leakageTotal = leakage.reduce((s,i)=>s+parseFloat(i.amount||0),0);
-    const unreconciled = parseFloat(k&&k.unreconciled_payments||0);
+    const unreconciled = parseFloat(k.unreconciled_payments||0);
     const stuck = [
       ['A/R Outstanding', fmtMoney(arOutstanding), 'ar'],
       ['Denied Amount', fmtMoney(deniedAmount), 'denials'],
