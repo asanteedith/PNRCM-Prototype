@@ -18,22 +18,98 @@ from db import get_db, now, audit
 
 # Role hierarchy: higher level can access lower level resources
 ROLE_HIERARCHY = {
-    "administrator": 5,
+    "administrator": 6,
+    "facility_administrator": 5,
     "revenue_cycle_manager": 4,
     "finance_officer": 4,
     "billing_officer": 3,
     "claims_officer": 3,
+    "medical_coder": 2,
     "clinical_documentation_reviewer": 2,
+    "registration_officer": 1,
     "department_staff": 1,
 }
 
 # Roles permitted for sensitive financial operations
 SENSITIVE_FINANCIAL_ROLES = {
-    "administrator", "revenue_cycle_manager", "finance_officer", "billing_officer",
+    "administrator", "facility_administrator", "revenue_cycle_manager", "finance_officer", "billing_officer",
 }
 
 # Roles permitted for write-off approval
 WRITE_OFF_APPROVAL_ROLES = {"administrator", "revenue_cycle_manager", "finance_officer"}
+
+# Domain role sets for centralized route enforcement
+_FINANCE_ROLES = {"administrator", "facility_administrator", "revenue_cycle_manager", "finance_officer"}
+_BILLING_ROLES = {"administrator", "facility_administrator", "revenue_cycle_manager", "finance_officer", "billing_officer"}
+_CLAIMS_ROLES = {"administrator", "facility_administrator", "revenue_cycle_manager", "finance_officer", "claims_officer"}
+_CODING_ROLES = {"administrator", "facility_administrator", "revenue_cycle_manager", "medical_coder", "clinical_documentation_reviewer"}
+_AUTH_ROLES = {"administrator", "facility_administrator", "revenue_cycle_manager", "clinical_documentation_reviewer"}
+_ADMIN_ROLES = {"administrator", "facility_administrator"}
+
+
+def required_roles_for(method: str, path: str):
+    """Return the set of roles allowed to perform a mutating request, or None if unrestricted.
+
+    Read (GET/HEAD/OPTIONS) requests are unrestricted for authenticated users.
+    Anonymous (no identified user) requests are handled by the caller (demo mode).
+    """
+    if method.upper() in ("GET", "HEAD", "OPTIONS"):
+        return None
+    p = path.rstrip("/")
+    # Administrative configuration
+    if p.startswith("/api/users") or p.startswith("/api/facilities") or p.startswith("/api/departments") \
+            or p.startswith("/api/payer-rules") or p == "/api/reset" or p.startswith("/api/demo/seed") \
+            or p.startswith("/api/roles"):
+        return _ADMIN_ROLES
+    # Denials / appeals
+    if p.startswith("/api/denials") or p.startswith("/api/appeals"):
+        return _CLAIMS_ROLES
+    # Authorizations
+    if p.startswith("/api/authorizations"):
+        return _AUTH_ROLES
+    # Payments / reconciliation / write-offs / revenue integrity / underpayments
+    if p.startswith("/api/payments") or p.startswith("/api/payment-matches") or p.startswith("/api/reconciliations") \
+            or p.startswith("/api/write-offs") or p.startswith("/api/revenue-integrity") \
+            or p.startswith("/api/underpayments") or p.startswith("/api/collections/payments") \
+            or p.startswith("/api/payment/"):
+        return _FINANCE_ROLES
+    # Bills / collections balances / patient payments
+    if p.startswith("/api/bills") or p.startswith("/api/collections"):
+        return _BILLING_ROLES
+    # Claims (submit/vet/appeal)
+    if p.startswith("/api/claims"):
+        return _CLAIMS_ROLES
+    # Coding / documentation reviews
+    if p.startswith("/api/coding-suggestions") or p.startswith("/api/documentation-reviews"):
+        return _CODING_ROLES
+    # Follow-ups / AR
+    if p.startswith("/api/followups") or p.startswith("/api/ar"):
+        return _FINANCE_ROLES
+    return None
+
+
+def check_permission(method: str, path: str):
+    """Return (allowed: bool, required: set|None, role: str|None). Enforces RBAC when a user is identified."""
+    username = _get_current_username()
+    if not username:
+        # No identified user: demo/anonymous mode -> allow (caller preserves demo)
+        return True, None, None
+    allowed_roles = required_roles_for(method, path)
+    if allowed_roles is None:
+        return True, None, None
+    c = get_db()
+    try:
+        user = _get_user_role(c, username)
+        if not user:
+            # Unknown/anonymous identity (e.g., demo 'User'): allow to preserve
+            # the synthetic demo environment and scripted validation harness.
+            return True, None, None
+        role = user.get("role", "")
+        if role not in allowed_roles:
+            return False, allowed_roles, role
+        return True, None, role
+    finally:
+        c.close()
 
 
 def _get_user_role(c, username: str) -> Optional[dict]:

@@ -2829,10 +2829,58 @@ def claimit_dashboard():
 
 @app.before_request
 def _security_logging():
-    """Log access for state-changing requests and sensitive endpoints."""
-    if request.method in ("POST", "PUT", "PATCH", "DELETE") or request.path.startswith("/api/security"):
-        # Defer actual logging to after request via after_request
+    """Enforce role-based access for mutating requests when a user is identified.
+
+    Anonymous/demo requests (no X-User / actor) are allowed to preserve the
+    synthetic demo environment. When a user identity is supplied, sensitive
+    financial/admin routes require an appropriate role (server-side).
+    """
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        allowed, required, role = security.check_permission(request.method, request.path)
+        if not allowed:
+            return jsonify(
+                error="You do not have permission to perform this action.",
+                required=sorted(required) if required else None,
+                current_role=role,
+            ), 403
+
+
+@app.errorhandler(404)
+def _not_found(e):
+    if request.path.startswith("/api/"):
+        return jsonify(error="Resource not found", path=request.path), 404
+    return jsonify(error="Not found"), 404
+
+
+@app.errorhandler(405)
+def _method_not_allowed(e):
+    return jsonify(error="Method not allowed", method=request.method, path=request.path), 405
+
+
+@app.errorhandler(500)
+def _internal_error(e):
+    # Never leak stack traces to clients; log server-side
+    try:
+        app.logger.exception("Unhandled server error: %s %s", request.method, request.path)
+    except Exception:
         pass
+    return jsonify(error="An internal error occurred. Please try again or contact support."), 500
+
+
+@app.get("/api/auth/me")
+def auth_me():
+    """Return the current user identity/role (for the frontend to drive UI)."""
+    username = security._get_current_username()
+    if not username:
+        return jsonify(authenticated=False, user=None, role=None)
+    c = get_db()
+    try:
+        user = security._get_user_role(c, username)
+        if not user:
+            return jsonify(authenticated=False, user=username, role=None)
+        return jsonify(authenticated=True, user=username, role=user.get("role"), facility_id=user.get("facility_id"))
+    finally:
+        c.close()
 
 @app.after_request
 def _security_after_request(response):
