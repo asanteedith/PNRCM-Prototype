@@ -191,7 +191,17 @@ def reset():
 @app.get("/api/patients")
 def list_patients():
     c = get_db()
-    rows = c.execute("SELECT * FROM patients ORDER BY created_at DESC").fetchall()
+    # Facility isolation: restrict to the caller's facility when one is assigned
+    facility_id = None
+    username = security._get_current_username()
+    if username:
+        u = security._get_user_role(c, username)
+        if u:
+            facility_id = u.get("facility_id")
+    if facility_id:
+        rows = c.execute("SELECT * FROM patients WHERE facility_id=? ORDER BY created_at DESC", (facility_id,)).fetchall()
+    else:
+        rows = c.execute("SELECT * FROM patients ORDER BY created_at DESC").fetchall()
     c.close()
     return jsonify([dict(x) for x in rows])
 
