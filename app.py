@@ -6,6 +6,7 @@ from agents.claims_vetting import vet_claim, run_standards_rules
 from agents.documentation import review_documentation, resolve_documentation_review
 from agents.billing import generate_bill, validate_bill
 from agents import leakage as leakage_mod
+from agents import financial_analytics
 from agents.eligibility import check_eligibility, check_encounter_eligibility, create_eligibility_task
 from agents.prior_auth import check_authorizations, create_authorization, create_auth_task
 from agents.denial import detect_denials, list_denials, resolve_denial, denial_patterns
@@ -3107,6 +3108,44 @@ def review_tasks_resolve_enhanced_route(task_id):
         return jsonify(result[0]), result[1]
     return jsonify(result)
 
+
+# ---------------- Financial Analytics & Trends Agent ----------------
+@app.get("/api/financial-analytics/overview")
+def financial_analytics_overview_route():
+    start = request.args.get("start"); end = request.args.get("end")
+    return jsonify(financial_analytics.run_full_analysis(start, end))
+
+@app.get("/api/financial-analytics/revenue-trends")
+def financial_analytics_revenue_route():
+    return jsonify(financial_analytics.revenue_trends(request.args.get("start"), request.args.get("end")))
+
+@app.get("/api/financial-analytics/payers")
+def financial_analytics_payers_route():
+    return jsonify(financial_analytics.payer_performance(request.args.get("start"), request.args.get("end")))
+
+@app.get("/api/financial-analytics/claims-denials")
+def financial_analytics_claims_route():
+    return jsonify(financial_analytics.claims_denial_trends(request.args.get("start"), request.args.get("end")))
+
+@app.get("/api/financial-analytics/ar-aging")
+def financial_analytics_ar_route():
+    return jsonify(financial_analytics.ar_aging(request.args.get("start"), request.args.get("end")))
+
+@app.get("/api/financial-analytics/leakage")
+def financial_analytics_leakage_route():
+    return jsonify(financial_analytics.leakage_trends(request.args.get("start"), request.args.get("end")))
+
+@app.get("/api/financial-analytics/forecast")
+def financial_analytics_forecast_route():
+    return jsonify(financial_analytics.forecast(int(request.args.get("months", 3))))
+
+@app.get("/api/financial-analytics/anomalies")
+def financial_analytics_anomalies_route():
+    return jsonify(financial_analytics.anomalies())
+
+@app.get("/api/financial-analytics/insights")
+def financial_analytics_insights_route():
+    return jsonify(financial_analytics.management_insights(request.args.get("start"), request.args.get("end")))
 
 # ---------------- Phase 6: Revenue Impact Tracking ----------------
 

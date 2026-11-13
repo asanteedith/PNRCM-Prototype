@@ -14,6 +14,7 @@ AGENT_REGISTRY = [
     {"name":"Claims Validation Agent","role":"Vets claims before submission"},
     {"name":"Payment and Reconciliation Agent","role":"Records and reconciles payments"},
     {"name":"Revenue Leakage Detection Agent","role":"Detects potential leakage"},
+    {"name":"Financial Analytics & Trends Agent","role":"Analyzes revenue trends, payer/claims performance, AR, anomalies (read-only, advisory)"},
     {"name":"Reporting Agent","role":"Summarizes revenue metrics"},
     {"name":"Human Review Agent","role":"Routes exceptions to human decision"},
 ]

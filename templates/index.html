@@ -676,6 +676,7 @@
           <button class="btn sm" id="an-tab-integrity" onclick="anShowTab('integrity')">Revenue Integrity</button>
           <button class="btn sm" id="an-tab-agents" onclick="anShowTab('agents')">Agent Performance</button>
           <button class="btn sm" id="an-tab-payers" onclick="anShowTab('payers')">Payer Intelligence</button>
+          <button class="btn sm" id="an-tab-trends" onclick="anShowTab('trends')">Trends &amp; Insights</button>
           <button class="btn sm" id="an-tab-reports" onclick="anShowTab('reports')">Reports</button>
           <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
             <label style="font-size:10px;color:var(--muted);text-transform:uppercase">From</label>
@@ -743,6 +744,32 @@
               </table>
             </div>
           </div>
+        </div>
+
+        <!-- TRENDS & INSIGHTS TAB (Financial Analytics & Trends Agent) -->
+        <div id="an-tab-trends-content" style="display:none">
+          <div class="section-toolbar" style="margin-bottom:10px">
+            <span class="tag" style="padding:4px 8px">Financial Analytics &amp; Trends Agent</span>
+            <button class="btn sm primary" onclick="anLoadTrends()">Run Analysis</button>
+          </div>
+          <div class="metric-strip" id="ant-kpis"></div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-title">Management Insights</div>
+            <div id="ant-insights"></div>
+          </div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Revenue Trend (billed vs collected by month)</div><div id="ant-revenue"></div></div>
+            <div class="card"><div class="card-title">Claims &amp; Denial Trend</div><div id="ant-claims"></div></div>
+          </div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Payer Performance</div><div id="ant-payers"></div></div>
+            <div class="card"><div class="card-title">A/R Aging</div><div id="ant-ar"></div></div>
+          </div>
+          <div class="grid-2" style="margin-top:12px">
+            <div class="card"><div class="card-title">Revenue Leakage (estimated vs confirmed)</div><div id="ant-leakage"></div></div>
+            <div class="card"><div class="card-title">Forecast &amp; Anomalies</div><div id="ant-forecast"></div></div>
+          </div>
+          <div class="notice" style="margin-top:12px">All figures are derived from persisted records. Estimated exposure is not confirmed loss; forecasts are estimates, not outcomes. This agent is read-only and does not modify financial records.</div>
         </div>
 
         <!-- REPORTS TAB -->
@@ -2362,12 +2389,56 @@ async function riResolve(id, cat){
 let _anTab = 'overview';
 function anShowTab(tab){
   _anTab = tab;
-  ['overview','revenue','integrity','agents','payers','reports'].forEach(t=>{
+  ['overview','revenue','integrity','agents','payers','trends','reports'].forEach(t=>{
     const btn=$el('an-tab-'+t); const c=$el('an-tab-'+t+'-content');
     if(btn){ btn.classList.toggle('primary', t===tab); }
     if(c) c.style.display = (t===tab)?'block':'none';
   });
+  if(tab==='trends'){ anLoadTrends(); return; }
   anRefresh();
+}
+
+async function anLoadTrends(){
+  const start = ($el('an-start')||{}).value || '', end = ($el('an-end')||{}).value || '';
+  const qs = (start||end) ? ('?start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)) : '';
+  try{
+    const d = await api('/api/financial-analytics/overview'+qs);
+    const rt = d.revenue_trends||{}, cp = d.payer_performance||{payers:[]}, cd = d.claims_denial_trends||{},
+          ar = d.ar_aging||{buckets:{}}, lk = d.leakage_trends||{}, fc = d.forecast||{}, an = d.anomalies||{flags:[]},
+          ins = d.management_insights||{insights:[]};
+    $el('ant-kpis').innerHTML =
+      anKpi('Billed', fmtMoney(rt.total_billed)) + anKpi('Collected', fmtMoney(rt.total_collected)) +
+      anKpi('Collection Rate', (rt.collection_rate_pct||0)+'%') +
+      anKpi('Estimated Exposure', fmtMoney(lk.total_estimated_exposure||0),'Potential, not confirmed') +
+      anKpi('Verified Recovered', fmtMoney(lk.total_verified_recovered_amount||0)) +
+      anKpi('Overdue (90+)', fmtMoney((ar.buckets&&ar.buckets['90+']&&ar.buckets['90+'].amount)||0));
+    // insights
+    $el('ant-insights').innerHTML = (ins.insights||[]).map(i=>{
+      const cls = i.severity==='high'?'rejected':(i.severity==='medium'?'needs-review':'approved');
+      return `<div style="padding:8px;border:1px solid var(--line);border-radius:4px;margin-bottom:8px">
+        <span class="status ${cls}">${esc(i.severity||'info')}</span> <strong>${esc(i.title)}</strong>
+        <div class="small" style="margin-top:4px">${esc(i.detail)}</div>
+        ${i.next_action?`<div class="small" style="margin-top:3px"><b>Next:</b> ${esc(i.next_action)} ${i.owner?('<i>('+esc(i.owner)+')</i>'):''}</div>`:''}</div>`;
+    }).join('') || '<div class="empty">No insights.</div>';
+    // revenue trend
+    $el('ant-revenue').innerHTML = (rt.months||[]).map(m=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(m.month)}</span><span>Billed ${fmtMoney(m.billed)} · Collected ${fmtMoney(m.collected)}</span></div>`).join('') || '<div class="empty">No data.</div>';
+    // claims/denial
+    $el('ant-claims').innerHTML = (cd.months||[]).map(m=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(m.month)}</span><span>${m.submitted} submitted · ${m.denied} denied</span></div>`).join('') || '<div class="empty">No claims.</div>';
+    // payers
+    $el('ant-payers').innerHTML = (cp.payers||[]).map(p=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(p.payer)}</span><span>${fmtMoney(p.billed)} · ${p.denial_rate_pct}% denied</span></div>`).join('') || '<div class="empty">No payers.</div>';
+    // ar
+    const ab = ar.buckets||{};
+    $el('ant-ar').innerHTML = Object.entries(ab).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(k)} days</span><span>${fmtMoney(v.amount)} (${v.count})</span></div>`).join('') || '<div class="empty">No A/R.</div>';
+    // leakage
+    $el('ant-leakage').innerHTML = (lk.by_category||[]).map(c=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e3e9ee"><span class="tag">${esc(c.category)}</span><span>Est ${fmtMoney(c.estimated)} · Conf ${fmtMoney(c.confirmed)}</span></div>`).join('') || '<div class="empty">No leakage.</div>';
+    // forecast + anomalies
+    let fh = '';
+    if(fc.supported){ fh += '<div class="small"><b>Forecast (next '+ (fc.forecast||[]).length +' steps, estimate):</b></div>' + (fc.forecast||[]).map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>+${p.step}</span><span>${fmtMoney(p.estimated_collected)}</span></div>`).join(''); }
+    else { fh += '<div class="small" style="color:var(--muted)">Forecast not supported: '+esc(fc.reason||'insufficient data')+'</div>'; }
+    fh += '<div class="small" style="margin-top:8px"><b>Anomalies:</b></div>';
+    fh += (an.flags||[]).map(f=>`<div class="small">• ${esc(f.detail)}</div>`).join('') || '<div class="small">None detected.</div>';
+    $el('ant-forecast').innerHTML = fh;
+  }catch(e){ alert('Trends error: '+e.message); }
 }
 
 function anKpi(label, value, sub){
