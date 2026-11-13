@@ -2398,13 +2398,19 @@ def authorizations_decision(aid):
     if not auth:
         c.close(); return jsonify(error="Authorization not found"), 404
     new_status = {"approve":"approved","reject":"rejected","request_documents":"documents_requested"}[decision]
+    # Prefer authenticated identity; fall back to the supplied reviewer name
+    try:
+        auth_user = security._get_current_username()
+    except Exception:
+        auth_user = None
+    reviewer = auth_user or data.get("reviewer") or "User"
     c.execute(
         """UPDATE authorizations SET status=?, updated_at=?, approving_staff=?, rejection_reason=?, approved_at=?
         WHERE id=?""",
-        (new_status, now(), data.get("reviewer","User"), data.get("rejection_reason",""),
-         now() if decision=="approve" else None, auth["id"])
+        (new_status, now(), reviewer, data.get("rejection_reason",""),
+         now() if decision in ("approve","reject") else None, auth["id"])
     )
-    audit(c, data.get("reviewer","User"), "user", "Authorization", f"Authorization {decision}d", "authorization", auth["id"], previous_state=auth["status"], new_state=new_status)
+    audit(c, reviewer, "user", "Authorization", f"Authorization {decision}d", "authorization", auth["id"], previous_state=auth["status"], new_state=new_status)
     c.commit(); c.close()
     return jsonify({"ok": True, "status": new_status})
 

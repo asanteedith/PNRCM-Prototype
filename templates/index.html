@@ -986,6 +986,14 @@
   </div>
 </div>
 
+<div class="modal" id="modal-auth-detail">
+  <div class="modal-content">
+    <div class="modal-header"><div class="modal-title">Authorization Detail</div><button class="modal-close" onclick="hideModal('modal-auth-detail')">&times;</button></div>
+    <div class="modal-body" id="auth-detail-body"></div>
+    <div class="modal-footer"><button class="btn" onclick="hideModal('modal-auth-detail')">Close</button></div>
+  </div>
+</div>
+
 <!-- Payment Simulation Modal -->
 <div class="modal" id="modal-pay">
   <div class="modal-content">
@@ -1174,10 +1182,61 @@ function showSection(id){
 window.showSection=showSection;
 
 function fmtMoney(n){
-  if(n==null) return '&#8212;';
-  return 'GHS ' + Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  if(n==null||n==='') return '—';
+  const num = Number(n);
+  if(isNaN(num)) return '—';
+  return 'GHS ' + num.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+// Readable date/time helpers (preserve underlying ISO; display only)
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _parseDate(v){
+  if(v==null||v==='') return null;
+  // Accept ISO or common SQL datetime
+  const d = new Date(String(v).includes(' ') && !String(v).includes('T') ? String(v).replace(' ','T') : v);
+  return isNaN(d.getTime()) ? null : d;
+}
+function fmtDate(v){
+  const d=_parseDate(v);
+  if(!d) return '—';
+  return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear();
+}
+function fmtDateTime(v){
+  const d=_parseDate(v);
+  if(!d) return '—';
+  let h=d.getHours(); const ap=h>=12?'PM':'AM'; h=h%12; if(h===0) h=12;
+  const min=String(d.getMinutes()).padStart(2,'0');
+  return fmtDate(v)+', '+h+':'+min+' '+ap;
+}
+function relTime(v){
+  const d=_parseDate(v);
+  if(!d) return '';
+  const diff = Date.now()-d.getTime();
+  const day=86400000;
+  if(diff < 0){
+    const days = Math.ceil(-diff/day);
+    if(days<=0) return 'today';
+    if(days===1) return 'tomorrow';
+    return 'in '+days+' days';
+  }
+  if(diff < 3600000) return 'just now';
+  if(diff < day) return Math.floor(diff/3600000)+'h ago';
+  const days=Math.floor(diff/day);
+  if(days===1) return 'yesterday';
+  if(days<30) return days+'d ago';
+  return fmtDate(v);
+}
+// Compact readable business identifier from a UUID: use known prefix from the entity fields
+function ref(prefix, id){
+  if(id==null||id==='') return '—';
+  const s=String(id);
+  // If already a business id (contains a dash and not a UUID), show as-is truncated
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s);
+  if(!isUuid) return esc(s.length>18 ? s.slice(0,18) : s);
+  // Derive short code from prefix + last 6 hex
+  const short = s.replace(/-/g,'').slice(-6).toUpperCase();
+  return esc((prefix?prefix+'-':'') + short);
+}
 function statusBadge(s){
   const k=(s||'').toString().toLowerCase();
   let cls='open';
@@ -1265,12 +1324,12 @@ async function clmList(){
     rows.forEach(c=>{
       tb+=`<tr onclick="clmOpen('${esc(c.id)}','${esc(c.claim_number||c.id)}')">
         <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
-        <td><span class="mono">${esc(c.encounter_id||'&#8212;')}</span></td>
-        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td><span class="mono">${esc(c.encounter_id||'—')}</span></td>
+        <td>${esc(c.payer_name||c.payer_type||'—')}</td>
         <td>${fmtMoney(c.total_charges)}</td>
         <td>${fmtMoney(c.approved_amount)}</td>
         <td>${statusBadge(c.status)}</td>
-        <td class="small">${esc(c.denial_reason||'&#8212;')}</td>
+        <td class="small">${esc(c.denial_reason||'—')}</td>
         <td>
           <button class="btn sm" onclick="clmVet('${esc(c.id)}')">Vet</button>
           ${c.status==='draft'?`<button class="btn sm primary" onclick="clmSubmit('${esc(c.id)}')">Submit</button>`:''}
@@ -1285,7 +1344,7 @@ async function clmOpen(id, number){
   try{
     const claim = await api('/api/claims/'+encodeURIComponent(id));
     const rec = await api('/api/reconciliations/'+encodeURIComponent(id)).catch(()=>null);
-    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Claim</td><td>${esc(claim.claim_number||claim.id)}</td></tr><tr><td>Encounter</td><td>${esc(claim.encounter_id||'&#8212;')}</td></tr><tr><td>Payer</td><td>${esc(claim.payer_name||claim.payer_type||'&#8212;')}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(claim.total_charges)}</td></tr><tr><td>Approved Amount</td><td>${fmtMoney(claim.approved_amount)}</td></tr><tr><td>Expected Reimbursement</td><td>${fmtMoney(claim.expected_reimbursement)}</td></tr><tr><td>Paid Amount</td><td>${fmtMoney(claim.paid_amount)}</td></tr><tr><td>Status</td><td>${statusBadge(claim.status)}</td></tr><tr><td>Denial Reason</td><td>${esc(claim.denial_reason||'&#8212;')}</td></tr></table>`;
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Claim</td><td>${esc(claim.claim_number||claim.id)}</td></tr><tr><td>Encounter</td><td>${esc(claim.encounter_id||'—')}</td></tr><tr><td>Payer</td><td>${esc(claim.payer_name||claim.payer_type||'—')}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(claim.total_charges)}</td></tr><tr><td>Approved Amount</td><td>${fmtMoney(claim.approved_amount)}</td></tr><tr><td>Expected Reimbursement</td><td>${fmtMoney(claim.expected_reimbursement)}</td></tr><tr><td>Paid Amount</td><td>${fmtMoney(claim.paid_amount)}</td></tr><tr><td>Status</td><td>${statusBadge(claim.status)}</td></tr><tr><td>Denial Reason</td><td>${esc(claim.denial_reason||'—')}</td></tr></table>`;
     if(rec){
       html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Reconciliation</div>`;
       html+=`<div style="padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:#fafbfc">
@@ -1342,8 +1401,8 @@ async function clmprepList(){
       const readiness = issues.length===0?'Ready':(issues.length<=2?'Needs Review':'Not Ready');
       tb+=`<tr onclick="clmPrepOpen('${esc(c.id)}')">
         <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
-        <td><span class="mono">${esc(c.encounter_id||'&#8212;')}</span></td>
-        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td><span class="mono">${esc(c.encounter_id||'—')}</span></td>
+        <td>${esc(c.payer_name||c.payer_type||'—')}</td>
         <td>${fmtMoney(c.total_charges)}</td>
         <td>${statusBadge(c.status)}</td>
         <td>${issues.length}</td>
@@ -1377,11 +1436,11 @@ async function clmsubList(){
     rows.forEach(c=>{
       tb+=`<tr onclick="clmOpen('${esc(c.id)}','${esc(c.claim_number||c.id)}')">
         <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
-        <td><span class="mono">${esc(c.encounter_id||'&#8212;')}</span></td>
-        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td><span class="mono">${esc(c.encounter_id||'—')}</span></td>
+        <td>${esc(c.payer_name||c.payer_type||'—')}</td>
         <td>${fmtMoney(c.total_charges)}</td>
         <td>${statusBadge(c.status)}</td>
-        <td>${esc(c.submitted_at||'&#8212;')}</td>
+        <td>${esc(c.submitted_at||'—')}</td>
         <td>${esc(c.status==='paid'?'Payment received':c.status==='denied'?'Rejected':'Pending')}</td>
         <td>
           ${c.status==='submitted'?`<button class="btn sm" onclick="simPayerResponse('${esc(c.id)}')">Simulate Response</button>`:''}
@@ -1421,12 +1480,12 @@ async function denList(){
     let tb='';
     rows.forEach(d=>{
       tb+=`<tr>
-        <td><span class="mono">${esc(d.claim_id||'&#8212;')}</span></td>
-        <td>${esc(d.payer_name||'&#8212;')}</td>
+        <td><span class="mono">${esc(d.claim_id||'—')}</span></td>
+        <td>${esc(d.payer_name||'—')}</td>
         <td>${fmtMoney(d.amount||0)}</td>
-        <td><span class="tag">${esc(d.denial_category||d.denial_reason||'&#8212;')}</span></td>
-        <td class="small">${esc(d.denial_reason||'&#8212;')}</td>
-        <td>${esc(d.deadline||'&#8212;')}</td>
+        <td><span class="tag">${esc(d.denial_category||d.denial_reason||'—')}</span></td>
+        <td class="small">${esc(d.denial_reason||'—')}</td>
+        <td>${esc(d.deadline||'—')}</td>
         <td>${statusBadge(d.status)}</td>
         <td>
           <button class="btn sm" onclick="denResolve('${esc(d.id)}')">Resolve</button>
@@ -1479,8 +1538,8 @@ async function arList(){
       const priority = age>60?'high':(age>30?'medium':'low');
       tb+=`<tr>
         <td><span class="mono">${esc(c.claim_number||c.id)}</span></td>
-        <td>${esc(c.patient_id||'&#8212;')}</td>
-        <td>${esc(c.payer_name||c.payer_type||'&#8212;')}</td>
+        <td>${esc(c.patient_id||'—')}</td>
+        <td>${esc(c.payer_name||c.payer_type||'—')}</td>
         <td>${fmtMoney(parseFloat(c.approved_amount||0)-parseFloat(c.paid_amount||0))}</td>
         <td>${age} days</td>
         <td><span class="tag ${priority==='high'?'rejected':(priority==='medium'?'warning':'approved')}">${priority}</span></td>
@@ -1513,7 +1572,7 @@ async function payList(){
         <td><span class="mono">${esc(p.id)}</span></td>
         <td>${esc(p.payment_method)}</td>
         <td>${fmtMoney(p.amount)}</td>
-        <td><span class="mono">${esc(p.claim_id||'&#8212;')}</span></td>
+        <td><span class="mono">${esc(p.claim_id||'—')}</span></td>
         <td>${statusBadge(p.payment_status)}</td>
         <td>${statusBadge(p.reconciliation_status)}</td>
         <td><button class="btn sm" onclick="payMatch('${esc(p.id)}')">Match</button></td>
@@ -1577,9 +1636,9 @@ async function patList(){
     rows.forEach(b=>{
       const p = pMap[b.patient_id]; const e = eMap[b.encounter_id];
       tb+=`<tr>
-        <td>${p?esc(p.patient_id):'&#8212;'}</td>
-        <td>${p?esc(p.first_name+' '+p.last_name):'&#8212;'}</td>
-        <td>${e?esc(e.encounter_id):'&#8212;'}</td>
+        <td>${p?esc(p.patient_id):'—'}</td>
+        <td>${p?esc(p.first_name+' '+p.last_name):'—'}</td>
+        <td>${e?esc(e.encounter_id):'—'}</td>
         <td>${fmtMoney(b.expected_copayment)}</td>
         <td>${fmtMoney(b.amount_paid)}</td>
         <td>${fmtMoney(b.outstanding)}</td>
@@ -1607,15 +1666,19 @@ async function billingList(){
       if(b.status==='review' || b.status==='validation') inReview++;
       tb+=`<tr onclick="billOpenTransition('${esc(b.id)}','${esc(b.status)}')">
         <td><span class="mono">${esc(b.bill_number||b.id)}</span></td>
-        <td><span class="mono">${esc(b.encounter_id||'&#8212;')}</span></td>
-        <td>${esc(b.patient_id||'&#8212;')}</td>
+        <td><span class="mono small">${ref('ENC', b.encounter_id)}</span></td>
+        <td class="small">${b.patient_id?esc(String(b.patient_id).slice(0,8)):'—'}</td>
         <td>${fmtMoney(b.total)}</td>
         <td>${fmtMoney(b.paid)}</td>
         <td>${fmtMoney(b.outstanding)}</td>
         <td>${statusBadge(b.status)}</td>
         <td><button class="btn sm" onclick="event.stopPropagation(); billLineItems('${esc(b.id)}')">Items</button></td>
         <td>
-          <button class="btn sm" onclick="event.stopPropagation(); billToClaim('${esc(b.id)}','${esc(b.status)}')">To Claim</button>
+          ${(b.status==='approved'||b.status==='claims_ready')
+            ? `<button class="btn sm primary" onclick="event.stopPropagation(); billToClaim('${esc(b.id)}','${esc(b.status)}')">To Claim</button>`
+            : (b.status==='paid'
+              ? `<span class="small" style="color:var(--muted)">Paid</span>`
+              : `<button class="btn sm" disabled title="Available for approved/claims-ready bills" style="opacity:.5">To Claim</button>`)}
         </td>
       </tr>`;
     });
@@ -1659,9 +1722,15 @@ async function billOpenTransition(billId, currentStatus){
     'claims_ready':['submitted'],
     'submitted':[]
   }[currentStatus]||[];
-  allowed.forEach(s=>sel.innerHTML+=`<option value="${esc(s)}">${esc(s)}</option>`);
+  if(currentStatus==='paid'){
+    $el('bill-transition-result').innerHTML = '<div class="status approved">This bill is paid. Paid bills cannot transition to claim-creation states.</div>';
+  } else if(allowed.length===0){
+    $el('bill-transition-result').innerHTML = '<div class="notice">This bill is in a terminal state (submitted) and has no further transitions.</div>';
+  } else {
+    allowed.forEach(s=>sel.innerHTML+=`<option value="${esc(s)}">${esc(s)}</option>`);
+    $el('bill-transition-result').innerHTML='';
+  }
   $el('bill-transition-reason').value='';
-  $el('bill-transition-result').innerHTML='';
   $el('modal-bill-transition').classList.add('open');
   window._billTransitionId = billId;
 }
@@ -1679,27 +1748,49 @@ async function billTransitionSubmit(){
 async function billLineItems(billId){
   try{
     const items = await api('/api/bills/'+encodeURIComponent(billId)+'/line-items');
-    let html='<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Line Items for Bill '+esc(billId)+'</div>';
-    html+='<table class="data" style="font-size:10px"><thead><tr><th>Line Code</th><th>Description</th><th>Amount</th><th>Service ID</th></tr></thead><tbody>';
-    (items||[]).forEach(it=>{
-      html+=`<tr><td>${esc(it.line_code||'&#8212;')}</td><td>${esc(it.description||'&#8212;')}</td><td>${fmtMoney(it.amount)}</td><td><span class="mono">${esc(it.service_id||'&#8212;')}</span></td></tr>`;
-    });
-    html+='</tbody></table>';
-    html+='<div style="margin-top:8px"><button class="btn sm" onclick="hideModal(\'modal-bill\')">Close</button></div>';
+    // Fetch bill total for reconciliation
+    let bill = null;
+    try{ const all = await api('/api/bills'); bill = (all||[]).find(b=>b.id===billId || b.bill_number===billId); }catch(e){}
+    const billTotal = bill ? parseFloat(bill.total||0) : 0;
+    const sum = (items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0);
+    let html='<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Line Items &bull; Bill '+esc(bill?(bill.bill_number||bill.id):billId)+'</div>';
+    if(!items || items.length===0){
+      html += `<div class="empty" style="padding:16px;text-align:center;color:var(--muted)">
+        <div style="font-size:13px;margin-bottom:6px">No line items recorded for this bill.</div>
+        <div class="small">The bill total is ${fmtMoney(billTotal)}. Line items are created when services are billed or when a bill is generated from an encounter. This bill currently has a summary total but no itemised breakdown.</div>
+      </div>`;
+    } else {
+      html+='<table class="data" style="font-size:10px"><thead><tr><th>Line</th><th>Description</th><th>Service Ref</th><th style="text-align:right">Amount</th></tr></thead><tbody>';
+      (items||[]).forEach(it=>{
+        html+=`<tr><td><span class="mono">${esc(it.line_code||'—')}</span></td><td>${esc(it.description||'—')}</td><td><span class="mono small">${it.service_id?ref('SVC',it.service_id):'—'}</span></td><td style="text-align:right">${fmtMoney(it.amount)}</td></tr>`;
+      });
+      html+='</tbody></table>';
+      const reconciled = Math.abs(sum-billTotal) < 0.01;
+      html+=`<div style="margin-top:10px;display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--line)">
+        <span>Line items sum: <strong>${fmtMoney(sum)}</strong></span>
+        <span>Bill total: <strong>${fmtMoney(billTotal)}</strong></span>
+        <span>${reconciled?'<span class="status approved">Reconciled</span>':'<span class="status needs-review">Variance '+fmtMoney(Math.abs(sum-billTotal))+'</span>'}</span>
+      </div>`;
+    }
+    html+='<div style="margin-top:10px"><button class="btn sm" onclick="hideModal(\'modal-enc\')">Close</button></div>';
     $el('enc-modal-body').innerHTML=html;
     $el('enc-modal-title').textContent='Bill Line Items';
     $el('modal-enc').classList.add('open');
   }catch(e){ alert('Error loading line items: '+e.message); }
 }
 async function billToClaim(billId, currentStatus){
+  if(currentStatus==='paid'){
+    alert('This bill has already been paid. Claim creation is only available for approved or claims-ready bills.');
+    return;
+  }
   if(currentStatus!=='approved' && currentStatus!=='claims_ready'){
-    alert('Bill must be approved or claims_ready to create a claim. Current: '+currentStatus);
+    alert('Claim creation requires an approved or claims-ready bill. Current status: '+currentStatus+'. Advance the bill through the lifecycle first.');
     return;
   }
   if(!confirm('Create a claim from this bill?')) return;
   try{
     const r = await api('/api/bills/'+encodeURIComponent(billId)+'/to-claim',{method:'POST',body:{actor:'User'}});
-    alert('Claim created: '+esc(r.claim_number||r.id));
+    alert('Claim created: '+(r.claim_number||r.id));
     billingList();
   }catch(e){ alert('Failed: '+e.message); }
 }
@@ -1719,13 +1810,13 @@ async function riImpactList(){
     rows.forEach(i=>{
       tb+=`<tr onclick="riImpactOpen('${esc(i.impact_id)}')">
         <td><span class="mono">${esc(i.impact_id)}</span></td>
-        <td>${esc(i.source_finding_type||'&#8212;')}</td>
-        <td class="small">${esc(i.original_issue||'&#8212;')}</td>
+        <td>${esc(i.source_finding_type||'—')}</td>
+        <td class="small">${esc(i.original_issue||'—')}</td>
         <td>${fmtMoney(i.initial_estimated_amount)}</td>
         <td>${fmtMoney(i.confirmed_recovered_amount)}</td>
         <td>${fmtMoney(i.confirmed_protected_amount)}</td>
         <td>${statusBadge(i.lifecycle_stage)}</td>
-        <td>${esc(i.outcome_category||'&#8212;')}</td>
+        <td>${esc(i.outcome_category||'—')}</td>
         <td>
           <button class="btn sm" onclick="event.stopPropagation(); riImpactStage('${esc(i.impact_id)}','${esc(i.lifecycle_stage)}')">Stage</button>
           ${i.lifecycle_stage==='OUTCOME VERIFIED'?`<button class="btn sm" onclick="event.stopPropagation(); riImpactClose('${esc(i.impact_id)}')">Close</button>`:''}
@@ -1771,14 +1862,14 @@ async function riImpactOpen(impactId){
     html+=`<tr><td>Source Finding ID</td><td>${esc(i.source_finding_id)}</td></tr>`;
     html+=`<tr><td>Original Issue</td><td>${esc(i.original_issue)}</td></tr>`;
     html+=`<tr><td>Lifecycle Stage</td><td>${statusBadge(i.lifecycle_stage)}</td></tr>`;
-    html+=`<tr><td>Outcome Category</td><td>${esc(i.outcome_category||'&#8212;')}</td></tr>`;
+    html+=`<tr><td>Outcome Category</td><td>${esc(i.outcome_category||'—')}</td></tr>`;
     html+=`<tr><td>Estimated Amount</td><td>${fmtMoney(i.initial_estimated_amount)}</td></tr>`;
     html+=`<tr><td>Confirmed Recovered</td><td>${fmtMoney(i.confirmed_recovered_amount)}</td></tr>`;
     html+=`<tr><td>Confirmed Protected</td><td>${fmtMoney(i.confirmed_protected_amount)}</td></tr>`;
-    html+=`<tr><td>Assigned Owner</td><td>${esc(i.assigned_owner||'&#8212;')}</td></tr>`;
-    html+=`<tr><td>Verification Status</td><td>${esc(i.human_verification_status||'&#8212;')}</td></tr>`;
-    html+=`<tr><td>Related Claim</td><td>${esc(i.related_claim_id||'&#8212;')}</td></tr>`;
-    html+=`<tr><td>Related Encounter</td><td>${esc(i.related_encounter_id||'&#8212;')}</td></tr>`;
+    html+=`<tr><td>Assigned Owner</td><td>${esc(i.assigned_owner||'—')}</td></tr>`;
+    html+=`<tr><td>Verification Status</td><td>${esc(i.human_verification_status||'—')}</td></tr>`;
+    html+=`<tr><td>Related Claim</td><td>${esc(i.related_claim_id||'—')}</td></tr>`;
+    html+=`<tr><td>Related Encounter</td><td>${esc(i.related_encounter_id||'—')}</td></tr>`;
     html+=`</table>`;
     $el('enc-modal-title').textContent='Revenue Impact: '+esc(impactId);
     $el('enc-modal-body').innerHTML=html;
@@ -1858,7 +1949,7 @@ async function ldLoadOverview(){
         <td>${fmtMoney(c.confirmed_amount)}</td>
         <td>${c.priority||'medium'}</td>
         <td>${statusBadge(c.status||'DETECTED')}</td>
-        <td>${esc(c.assigned_user||'&#8212;')}</td>
+        <td>${esc(c.assigned_user||'—')}</td>
         <td><button class="btn sm" onclick="event.stopPropagation();ldOpenCase('${esc(c.id)}')">Details</button></td>
       </tr>`;
     });
@@ -1933,7 +2024,7 @@ function ldRenderCases(cases){
       <td>${fmtMoney(c.verified_recovered_amount)}</td>
       <td><span class="tag">${esc(c.priority||'medium')}</span></td>
       <td>${statusBadge(c.status||'DETECTED')}</td>
-      <td class="small">${esc(c.assigned_user||'&#8212;')}</td>
+      <td class="small">${esc(c.assigned_user||'—')}</td>
       <td class="small mono">${esc((c.created_at||'').slice(0,10))}</td>
       <td>
         <button class="btn sm" onclick="event.stopPropagation();ldOpenCase('${esc(c.id)}')">View</button>
@@ -1960,10 +2051,10 @@ function ldRenderCaseDetail(c){
   let h = '';
   h += '<div class="grid-2">';
   h += '<div>';
-  h += '<p><strong>Category:</strong> '+esc(c.category||'&#8212;')+'</p>';
-  h += '<p><strong>Description:</strong> '+esc(c.description||'&#8212;')+'</p>';
-  h += '<p><strong>Detection Source:</strong> '+esc(c.detection_source||'&#8212;')+'</p>';
-  h += '<p><strong>Detection Rule:</strong> <code class="mono small">'+esc(c.detection_rule||'&#8212;')+'</code></p>';
+  h += '<p><strong>Category:</strong> '+esc(c.category||'—')+'</p>';
+  h += '<p><strong>Description:</strong> '+esc(c.description||'—')+'</p>';
+  h += '<p><strong>Detection Source:</strong> '+esc(c.detection_source||'—')+'</p>';
+  h += '<p><strong>Detection Rule:</strong> <code class="mono small">'+esc(c.detection_rule||'—')+'</code></p>';
   h += '</div>';
   h += '<div>';
   h += '<p><strong>Estimated Exposure:</strong> '+fmtMoney(c.estimated_exposure)+'</p>';
@@ -1974,17 +2065,17 @@ function ldRenderCaseDetail(c){
   h += '</div>';
   h += '</div>';
   h += '<hr class="hr">';
-  h += '<p><strong>Evidence:</strong></p><p class="small">'+esc(c.supporting_evidence||c.evidence||'&#8212;')+'</p>';
-  h += '<p><strong>Recommended Action:</strong></p><p class="small">'+esc(c.recommended_action||'&#8212;')+'</p>';
+  h += '<p><strong>Evidence:</strong></p><p class="small">'+esc(c.supporting_evidence||c.evidence||'—')+'</p>';
+  h += '<p><strong>Recommended Action:</strong></p><p class="small">'+esc(c.recommended_action||'—')+'</p>';
   h += '<hr class="hr">';
   h += '<div class="grid-2">';
-  h += '<div><p><strong>Entity Type:</strong> '+esc(c.entity_type||'&#8212;')+'</p><p><strong>Entity ID:</strong> <span class="mono small">'+esc(c.entity_id||'&#8212;')+'</span></p></div>';
-  h += '<div><p><strong>Encounter:</strong> <span class="mono small">'+esc(c.encounter_id||'&#8212;')+'</span></p><p><strong>Claim:</strong> <span class="mono small">'+esc(c.claim_id||'&#8212;')+'</span></p></div>';
+  h += '<div><p><strong>Entity Type:</strong> '+esc(c.entity_type||'—')+'</p><p><strong>Entity ID:</strong> <span class="mono small">'+esc(c.entity_id||'—')+'</span></p></div>';
+  h += '<div><p><strong>Encounter:</strong> <span class="mono small">'+esc(c.encounter_id||'—')+'</span></p><p><strong>Claim:</strong> <span class="mono small">'+esc(c.claim_id||'—')+'</span></p></div>';
   h += '</div>';
   h += '<hr class="hr">';
   h += '<p><strong>Assigned To:</strong> '+esc(c.assigned_user||'Unassigned')+'</p>';
-  h += '<p><strong>Detected:</strong> '+esc(c.created_at||'&#8212;')+'</p>';
-  h += '<p><strong>Last Updated:</strong> '+esc(c.updated_at||'&#8212;')+'</p>';
+  h += '<p><strong>Detected:</strong> '+esc(c.created_at||'—')+'</p>';
+  h += '<p><strong>Last Updated:</strong> '+esc(c.updated_at||'—')+'</p>';
   if(c.resolved_at) h += '<p><strong>Resolved:</strong> '+esc(c.resolved_at)+'</p>';
   if(c.resolution_notes) h += '<p><strong>Resolution Notes:</strong> <pre class="small" style="white-space:pre-wrap;background:#f7f9fb;padding:6px;border-radius:3px">'+esc(c.resolution_notes)+'</pre>';
   if(c.false_positive_reason) h += '<p><strong>False Positive Reason:</strong> '+esc(c.false_positive_reason)+'</p>';
@@ -2030,8 +2121,8 @@ function ldOpenAction(caseId){
   h += '</div>';
   h += '<hr class="hr">';
   h += '<div class="card"><div class="card-title">Case Context</div>';
-  h += '<p class="small">Evidence: '+esc(c.supporting_evidence||c.evidence||'&#8212;')+'</p>';
-  h += '<p class="small">Recommended: '+esc(c.recommended_action||'&#8212;')+'</p>';
+  h += '<p class="small">Evidence: '+esc(c.supporting_evidence||c.evidence||'—')+'</p>';
+  h += '<p class="small">Recommended: '+esc(c.recommended_action||'—')+'</p>';
   h += '<p class="small">Entity: '+esc(c.entity_type||'')+' <span class="mono">'+esc(c.entity_id||'')+'</span></p>';
   h += '</div>';
   $el('ld-action-body').innerHTML = h;
@@ -2386,8 +2477,8 @@ async function aiOrchestratorRefresh(){
         el.className = 'agent-task-list';
         el.style.cssText = 'margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);font-size:11px';
         el.innerHTML = `<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">${esc(a.name)} Workspace</div>
-          ${(tasks||[]).slice(0,5).map(t=>`<div style="padding:3px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(t.status||'').toLowerCase()}">${esc(t.status||'created')}</span> ${esc(t.task_type||'')} &bull; ${esc(t.entity_type||'')}/${esc((t.entity_id||'').substring(0,8))} <span style="float:right;font-size:9px">${esc(t.direction||'')}</span></div>`).join('')}
-          <div style="font-size:9px;color:var(--muted);margin-top:4px">${pending} pending &bull; ${(tasks||[]).length} total</div>`;
+          ${(tasks||[]).slice(0,5).map(t=>`<div style="padding:3px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(t.status||'').toLowerCase()}">${esc(t.status||'created')}</span> ${esc(t.task_type||'')} • ${esc(t.entity_type||'')}/${esc((t.entity_id||'').substring(0,8))} <span style="float:right;font-size:9px">${esc(t.direction||'')}</span></div>`).join('')}
+          <div style="font-size:9px;color:var(--muted);margin-top:4px">${pending} pending • ${(tasks||[]).length} total</div>`;
         $el('ai-orchestrator-grid').appendChild(el);
       }catch(e){ /* skip per-agent task load errors */ }
     }
@@ -2491,7 +2582,7 @@ async function showAgentDetail(agentName){
         <div>
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Tasks (${d.task_count||0})</div>
           <div style="font-size:11px">
-            ${(d.tasks||[]).slice(0,10).map(t=>`<div style="padding:4px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(t.status||'').toLowerCase()}">${esc(t.status||'created')}</span> ${esc(t.task_type||'')} &bull; ${esc(t.entity_type||'')}/${esc((t.entity_id||'').substring(0,8))} <span style="float:right;font-size:9px;color:var(--muted)">${esc(t.direction||'')}</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${esc(t.context||'')}</div></div>`).join('') || '<div style="font-size:10px;color:var(--muted);padding:8px">No tasks.</div>'}
+            ${(d.tasks||[]).slice(0,10).map(t=>`<div style="padding:4px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(t.status||'').toLowerCase()}">${esc(t.status||'created')}</span> ${esc(t.task_type||'')} • ${esc(t.entity_type||'')}/${esc((t.entity_id||'').substring(0,8))} <span style="float:right;font-size:9px;color:var(--muted)">${esc(t.direction||'')}</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${esc(t.context||'')}</div></div>`).join('') || '<div style="font-size:10px;color:var(--muted);padding:8px">No tasks.</div>'}
           </div>
         </div>
         <div>
@@ -2505,7 +2596,7 @@ async function showAgentDetail(agentName){
           </div>
           <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:10px;margin-bottom:6px">Recent Executions</div>
           <div style="font-size:11px">
-            ${(d.recent_executions||[]).slice(0,5).map(e=>`<div style="padding:3px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(e.status||'').toLowerCase()}">${esc(e.status||'pending')}</span> ${esc(e.task_name||'')} &bull; ${esc(e.entity_type||'')}/${esc((e.entity_id||'').substring(0,8))}<div style="font-size:9px;color:var(--muted);margin-top:2px">${esc(e.error_message||'')}</div></div>`).join('') || '<div style="font-size:10px;color:var(--muted);padding:8px">No executions.</div>'}
+            ${(d.recent_executions||[]).slice(0,5).map(e=>`<div style="padding:3px 0;border-bottom:1px solid #f2f6f9"><span class="status ${(e.status||'').toLowerCase()}">${esc(e.status||'pending')}</span> ${esc(e.task_name||'')} • ${esc(e.entity_type||'')}/${esc((e.entity_id||'').substring(0,8))}<div style="font-size:9px;color:var(--muted);margin-top:2px">${esc(e.error_message||'')}</div></div>`).join('') || '<div style="font-size:10px;color:var(--muted);padding:8px">No executions.</div>'}
           </div>
         </div>
       </div>
@@ -2556,7 +2647,7 @@ async function rvList(){
     }
     if(!f || f==='exceptions'){
       const ex = await api('/api/exceptions');
-      (ex||[]).forEach(r=>items.push({type:'Exception',ref:r.claim_id||r.encounter_id||r.bill_id||'&#8212;',context:r.title,rec:r.recommended_action,impact:0,status:r.status,id:r.id}));
+      (ex||[]).forEach(r=>items.push({type:'Exception',ref:r.claim_id||r.encounter_id||r.bill_id||'—',context:r.title,rec:r.recommended_action,impact:0,status:r.status,id:r.id}));
     }
     let tb='';
     items.forEach(it=>{
@@ -2727,7 +2818,7 @@ async function cmdRefresh(){
       ['Unreconciled Payments', fmtMoney(unreconciled), 'payments'],
       ['Potential Leakage', fmtMoney(leakageTotal), 'leakage-detection'],
     ];
-    $el('cmd-stuck').innerHTML=stuck.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} &rarr;</div><div class="value">${v}</div></div>`).join('');
+    $el('cmd-stuck').innerHTML=stuck.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} →</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-stuck').innerHTML = `<div class="error">Error loading stuck revenue: ${esc(e.message)}</div>`; }
 
   // Q3: Required Actions
@@ -2750,7 +2841,7 @@ async function cmdRefresh(){
       ['Coding Reviews', pendingCodes, 'coding'],
       ['Reconciliations Pending', pendingRecs, 'payments'],
     ];
-    $el('cmd-actions').innerHTML=actions.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} &rarr;</div><div class="value">${v}</div></div>`).join('');
+    $el('cmd-actions').innerHTML=actions.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} →</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-actions').innerHTML = `<div class="error">Error loading actions: ${esc(e.message)}</div>`; }
 
   // Q4: AI Operations
@@ -2768,7 +2859,7 @@ async function cmdRefresh(){
       ['Completed Tasks', m.completed||0, 'ai-orchestrator'],
       ['Escalated', m.escalated||0, 'review'],
     ];
-    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} &rarr;</div><div class="value">${v}</div></div>`).join('');
+    $el('cmd-ai-ops').innerHTML=aiOps.map(([l,v,sec])=>`<div class="metric" style="cursor:pointer" onclick="showSection('${sec}')" title="Open ${esc(l)}"><div class="label">${esc(l)} →</div><div class="value">${v}</div></div>`).join('');
   }catch(e){ $el('cmd-ai-ops').innerHTML = `<div class="error">Error loading AI ops: ${esc(e.message)}</div>`; }
 
   // Recent Activity
@@ -2776,7 +2867,7 @@ async function cmdRefresh(){
     const act = await api('/api/dashboard/activity');
     let ah='';
     (act||[]).slice(0,12).forEach(r=>{
-      ah+=`<div style="padding:6px 0;border-bottom:1px solid #e3e9ee"><div class="mono small">${esc(r.timestamp||'')}</div><div style="font-size:11px">${esc(r.action||'')}</div><div class="small">${esc(r.actor||'')} &bull; ${esc(r.entity_type||'')} / ${esc(r.entity_id||'')}</div></div>`;
+      ah+=`<div style="padding:6px 0;border-bottom:1px solid #e3e9ee"><div class="mono small">${esc(r.timestamp||'')}</div><div style="font-size:11px">${esc(r.action||'')}</div><div class="small">${esc(r.actor||'')} • ${esc(r.entity_type||'')} / ${esc(r.entity_id||'')}</div></div>`;
     });
     $el('command-activity').innerHTML = ah || '<div class="empty">No recent activity.</div>';
   }catch(e){ $el('command-activity').innerHTML = `<div class="error">Error loading activity: ${esc(e.message)}</div>`; }
@@ -2821,17 +2912,17 @@ async function encList(){
     let tb='';
     rows.forEach(e=>{
       const claim = (claims||[]).find(c=>c.encounter_id===e.id);
-      const payer = claim ? (claim.payer_name||claim.payer_type||'&#8212;') : '&#8212;';
+      const payer = claim ? (claim.payer_name||claim.payer_type||'—') : '—';
       if(pay && claim && claim.payer_name!==pay) return;
       tb+=`<tr onclick="encSelect('${esc(e.id)}','${esc(e.encounter_id)}')">
         <td><span class="mono">${esc(e.encounter_id)}</span></td>
         <td>${esc(e.patient_name)}</td>
-        <td><span class="tag">${esc(e.department||'&#8212;')}</span></td>
+        <td><span class="tag">${esc(e.department||'—')}</span></td>
         <td>${statusBadge(e.status)}</td>
         <td>${payer}</td>
         <td>${fmtMoney(parseFloat(e.total_charges||0))}</td>
         <td>${fmtMoney(parseFloat(e.outstanding||0))}</td>
-        <td><span class="tag">${esc(e.status||'&#8212;')}</span></td>
+        <td><span class="tag">${esc(e.status||'—')}</span></td>
         <td><button class="btn sm">View</button></td>
       </tr>`;
     });
@@ -2847,7 +2938,7 @@ async function encSelect(id, encNo){
     const services = wf.services||[];
     const transitions = wf.transitions||[];
     const totalCharges = services.reduce((s,x)=>s+parseFloat(x.total_price||0),0);
-    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Encounter</td><td>${esc(enc.encounter_id)}</td></tr><tr><td>Patient</td><td>${esc(enc.patient_name)}</td></tr><tr><td>Department</td><td>${esc(enc.department||'&#8212;')}</td></tr><tr><td>Type</td><td>${esc(enc.encounter_type)}</td></tr><tr><td>Status</td><td>${statusBadge(enc.status)}</td></tr><tr><td>Documentation</td><td>${enc.documentation_complete?'Complete':'Incomplete'}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(totalCharges)}</td></tr></table>`;
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">Encounter</td><td>${esc(enc.encounter_id)}</td></tr><tr><td>Patient</td><td>${esc(enc.patient_name)}</td></tr><tr><td>Department</td><td>${esc(enc.department||'—')}</td></tr><tr><td>Type</td><td>${esc(enc.encounter_type)}</td></tr><tr><td>Status</td><td>${statusBadge(enc.status)}</td></tr><tr><td>Documentation</td><td>${enc.documentation_complete?'Complete':'Incomplete'}</td></tr><tr><td>Total Charges</td><td>${fmtMoney(totalCharges)}</td></tr></table>`;
     html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Lifecycle Steps</div><div style="display:flex;gap:4px;margin-bottom:10px">`;
     const steps=['Registration','Eligibility','Clinical','Documentation','Charge Capture','Billing','Claims Submission','Payment','Reconciliation','Closure'];
     steps.forEach((s,idx)=>{
@@ -2856,7 +2947,7 @@ async function encSelect(id, encNo){
     });
     html+=`</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">Transitions</div><table class="data" style="margin-bottom:0">`;
     (transitions||[]).forEach(t=>{
-      html+=`<tr><td>${esc(t.from_status||'&#8212;')}</td><td>&rarr;</td><td><b>${esc(t.to_status)}</b></td><td class="small">${esc(t.actor||'')} &bull; ${esc(t.note||'')}</td><td class="mono small">${esc(t.ts||'')}</td></tr>`;
+      html+=`<tr><td>${esc(t.from_status||'—')}</td><td>→</td><td><b>${esc(t.to_status)}</b></td><td class="small">${esc(t.actor||'')} • ${esc(t.note||'')}</td><td class="mono small">${esc(t.ts||'')}</td></tr>`;
     });
     html+=`</table>`;
     $el('enc-modal-title').textContent='Encounter '+esc(encNo);
@@ -2880,14 +2971,19 @@ async function regList(){
     rows.forEach(p=>{
       let dups=0; try{ dups = JSON.parse(p.duplicate_flags||'[]').length; }catch(e){}
       let missing=0; try{ missing = JSON.parse(p.financial_profile||'{}').missing?.length||0; }catch(e){}
+      // Evidence-based statuses: only show Verified/Cleared when actual verification data exists
+      const elig = (p.insurance_type==='self_pay')
+        ? '<span class="status draft">Not Applicable</span>'
+        : (p.eligibility_verified ? '<span class="status approved">Verified</span>' : '<span class="status needs-review">Not Verified</span>');
+      const fin = (p.financial_cleared ? '<span class="status approved">Cleared</span>' : '<span class="status open">Not Cleared</span>');
       tb+=`<tr onclick="encSelectPatient('${esc(p.id)}','${esc(p.patient_id)}')">
         <td><span class="mono">${esc(p.patient_id)}</span></td>
         <td>${esc(p.first_name+' '+p.last_name)}</td>
         <td><span class="tag">${esc(p.insurance_type||'self_pay')}</span></td>
         <td>${missing} missing</td>
         <td>${dups>0?`<span class="status needs-review">${dups} potential match(es)</span>`:'<span class="status approved">None</span>'}</td>
-        <td>${p.insurance_type?`<span class="status approved">Verified</span>`:'<span class="status open">Pending</span>'}</td>
-        <td><span class="status ${p.insurance_type?'approved':'open'}">${p.insurance_type?'Cleared':'Pending'}</span></td>
+        <td>${elig}</td>
+        <td>${fin}</td>
         <td><button class="btn sm">View</button></td>
       </tr>`;
     });
@@ -2897,12 +2993,12 @@ async function regList(){
 async function encSelectPatient(id, mrn){
   try{
     const p = await api('/api/patients/'+encodeURIComponent(id));
-    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">MRN</td><td>${esc(p.patient.patient_id)}</td></tr><tr><td>Name</td><td>${esc(p.patient.first_name+' '+p.patient.last_name)}</td></tr><tr><td>Insurance Type</td><td>${esc(p.patient.insurance_type||'self_pay')}</td></tr><tr><td>Insurance Number</td><td>${esc(p.patient.insurance_number||'&#8212;')}</td></tr><tr><td>Status</td><td>${statusBadge(p.patient.status)}</td></tr></table>`;
+    let html=`<table style="margin-bottom:12px"><tr><td style="width:150px">MRN</td><td>${esc(p.patient.patient_id)}</td></tr><tr><td>Name</td><td>${esc(p.patient.first_name+' '+p.patient.last_name)}</td></tr><tr><td>Insurance Type</td><td>${esc(p.patient.insurance_type||'self_pay')}</td></tr><tr><td>Insurance Number</td><td>${esc(p.patient.insurance_number||'—')}</td></tr><tr><td>Status</td><td>${statusBadge(p.patient.status)}</td></tr></table>`;
     let dups=[]; try{ dups = JSON.parse(p.patient.duplicate_flags||'[]'); }catch(e){}
     if(dups.length>0){
       html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Duplicate Risk</div>`;
       dups.forEach(d=>{
-        html+=`<div class="alert-item medium"><div class="alert-title">Potential duplicate: ${esc(d.patient_id)}</div><div class="alert-meta">Match score: ${esc(d.score)} &bull; Reasons: ${esc(d.reasons.join(', '))}</div></div>`;
+        html+=`<div class="alert-item medium"><div class="alert-title">Potential duplicate: ${esc(d.patient_id)}</div><div class="alert-meta">Match score: ${esc(d.score)} • Reasons: ${esc(d.reasons.join(', '))}</div></div>`;
       });
     }
     let missing=[]; try{ missing = JSON.parse(p.patient.financial_profile||'{}').missing||[]; }catch(e){}
@@ -2912,7 +3008,7 @@ async function encSelectPatient(id, mrn){
     }
     html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Registration Timeline</div><div class="timeline">`;
     (p.timeline||[]).forEach(t=>{
-      html+=`<div class="timeline-item ${t.status==='done'?'completed':'open'}"><div class="time">${esc(t.ts||'')}</div><div class="action">${esc(t.action)}</div><div class="detail">${esc(t.detail||'')} &bull; ${esc(t.agent_name||'')}</div></div>`;
+      html+=`<div class="timeline-item ${t.status==='done'?'completed':'open'}"><div class="time">${esc(t.ts||'')}</div><div class="action">${esc(t.action)}</div><div class="detail">${esc(t.detail||'')} • ${esc(t.agent_name||'')}</div></div>`;
     });
     html+=`</div>`;
     $el('enc-modal-title').textContent='Patient Registration: '+esc(mrn);
@@ -2937,24 +3033,65 @@ async function authList(){
     let tb='';
     rows.forEach(a=>{
       const p = pMap[a.patient_id]; const e = eMap[a.encounter_id];
+      const st = (a.status||'').toLowerCase();
+      // Expiry indicator
+      const exp = _parseDate(a.expiry_date);
+      let expCell = '—';
+      if(exp){
+        const days = Math.ceil((exp.getTime()-Date.now())/86400000);
+        if(days < 0) expCell = `<span class="status rejected">Expired ${Math.abs(days)}d ago</span>`;
+        else if(days===0) expCell = `<span class="status needs-review">Expires today</span>`;
+        else if(days<=3) expCell = `<span class="status pending">Expires in ${days}d</span>`;
+        else expCell = fmtDate(a.expiry_date);
+      }
+      // Status-aware actions
+      let actions = '';
+      if(st==='pending'){
+        actions = `<button class="btn sm primary" onclick="authDecision('${esc(a.id)}','approve')">Approve</button>
+          <button class="btn sm danger" onclick="authDecision('${esc(a.id)}','reject')">Reject</button>
+          <button class="btn sm" onclick="authDecision('${esc(a.id)}','request_documents')">Request Docs</button>`;
+      } else if(st==='approved' || st==='rejected'){
+        actions = `<button class="btn sm" onclick="authView('${esc(a.id)}')">View Details</button>`;
+      } else {
+        actions = `<button class="btn sm" onclick="authView('${esc(a.id)}')">View</button>`;
+      }
       tb+=`<tr>
         <td><span class="mono">${esc(a.auth_number)}</span></td>
-        <td>${p?esc(p.first_name+' '+p.last_name):'&#8212;'}</td>
-        <td>${e?esc(e.encounter_id):'&#8212;'}</td>
-        <td><span class="tag">${esc(a.payer_name||a.payer_type||'&#8212;')}</span></td>
-        <td>${esc(a.procedure_code||'&#8212;')}</td>
+        <td>${p?esc(p.first_name+' '+p.last_name):'—'}</td>
+        <td><span class="mono small">${e?ref('ENC',e.id):'—'}</span></td>
+        <td><span class="tag">${esc(a.payer_name||a.payer_type||'—')}</span></td>
+        <td><span class="mono small">${esc(a.procedure_code||'—')}</span></td>
         <td>${statusBadge(a.status)}</td>
-        <td>${esc(a.requested_at||'')}</td>
-        <td>${esc(a.expiry_date||'&#8212;')}</td>
-        <td>
-          <button class="btn sm" onclick="authDecision('${esc(a.id)}','approve')">Approve</button>
-          ${a.status==='pending'?`<button class="btn sm danger" onclick="authDecision('${esc(a.id)}','reject')">Reject</button>`:''}
-          ${a.status==='pending'?`<button class="btn sm" onclick="authDecision('${esc(a.id)}','request_documents')">Request Docs</button>`:''}
-        </td>
+        <td class="small">${fmtDate(a.requested_at)}</td>
+        <td class="small">${expCell}</td>
+        <td>${actions}</td>
       </tr>`;
     });
     $el('auth-table-body').innerHTML = tb || '<tr><td colspan=9 class="empty">No authorizations found.</td></tr>';
   }catch(e){ alert('Error loading authorizations: '+e.message); }
+}
+async function authView(aid){
+  try{
+    const auths = await api('/api/authorizations');
+    const a = (auths||[]).find(x=>x.id===aid);
+    if(!a){ alert('Authorization not found'); return; }
+    const patients = await api('/api/patients'); const p=(patients||[]).find(x=>x.id===a.patient_id);
+    const html = `<table style="margin-bottom:10px">
+      <tr><td style="width:160px">Authorization</td><td><span class="mono">${esc(a.auth_number)}</span></td></tr>
+      <tr><td>Patient</td><td>${p?esc(p.first_name+' '+p.last_name+' ('+esc(p.patient_id)+')'):'—'}</td></tr>
+      <tr><td>Payer</td><td>${esc(a.payer_name||a.payer_type||'—')}</td></tr>
+      <tr><td>Procedure</td><td>${esc(a.procedure_code||a.service_description||'—')}</td></tr>
+      <tr><td>Status</td><td>${statusBadge(a.status)}</td></tr>
+      <tr><td>Requested</td><td>${fmtDateTime(a.requested_at)}</td></tr>
+      <tr><td>Expiry</td><td>${fmtDate(a.expiry_date)}</td></tr>
+      ${a.required_documents?`<tr><td>Required Docs</td><td>${esc(a.required_documents)}</td></tr>`:''}
+      ${a.approving_staff?`<tr><td>Reviewer</td><td>${esc(a.approving_staff)}</td></tr>`:''}
+      ${a.approved_at?`<tr><td>Decided</td><td>${fmtDateTime(a.approved_at)}</td></tr>`:''}
+      ${a.rejection_reason?`<tr><td>Reason</td><td>${esc(a.rejection_reason)}</td></tr>`:''}
+    </table>`;
+    $el('auth-detail-body').innerHTML = html;
+    $el('modal-auth-detail').classList.add('open');
+  }catch(e){ alert('Failed: '+e.message); }
 }
 async function authDecision(aid, decision){
   const reviewer = prompt('Reviewer name:')||'User';
@@ -2982,9 +3119,9 @@ async function docList(){
       const e = eMap[r.encounter_id];
       const findings = JSON.parse(r.findings||'[]');
       tb+=`<tr onclick="docOpen('${esc(r.id)}')">
-        <td><span class="mono">${esc(e?e.encounter_id:'&#8212;')}</span></td>
-        <td>${e?esc(e.patient_name||'&#8212;'):'&#8212;'}</td>
-        <td><span class="tag">${esc(e?e.department||'&#8212;':'&#8212;')}</span></td>
+        <td><span class="mono">${esc(e?e.encounter_id:'—')}</span></td>
+        <td>${e?esc(e.patient_name||'—'):'—'}</td>
+        <td><span class="tag">${esc(e?e.department||'—':'—')}</span></td>
         <td>${findings.length} finding(s)</td>
         <td>${esc(findings.length?findings[0].finding||findings[0].code:'None')}</td>
         <td>${r.human_review_required?'<span class="status pending">Required</span>':'<span class="status approved">Not required</span>'}</td>
@@ -3007,7 +3144,7 @@ async function docOpen(id){
         <div style="font-weight:600;font-size:11px">${esc(fnd.finding||fnd.code)}</div>
         <div class="small">${esc(fnd.explanation||'')}</div>
         <div class="small" style="margin-top:3px"><b>Recommended:</b> ${esc(fnd.recommended_correction||'')}</div>
-        <div class="small"><b>Field:</b> ${esc(fnd.field||'&#8212;')} &nbsp; <b>Severity:</b> ${esc(fnd.severity||'&#8212;')}</div>
+        <div class="small"><b>Field:</b> ${esc(fnd.field||'—')} &nbsp; <b>Severity:</b> ${esc(fnd.severity||'—')}</div>
       </div>`;
     });
     html+=`<div class="notice">The AI must never silently alter clinical documentation. Every proposed correction requires authorized human review.</div>`;
@@ -3053,12 +3190,12 @@ async function codeList(){
     rows.forEach(c=>{
       const e = eMap[c.encounter_id];
       tb+=`<tr onclick="codeOpen('${esc(c.id)}')">
-        <td><span class="mono">${esc(e?e.encounter_id:'&#8212;')}</span></td>
-        <td><span class="tag">${esc(c.code_type||'&#8212;')}</span></td>
-        <td><span class="mono">${esc(c.code_value||'&#8212;')}</span></td>
-        <td>${esc(c.code_description||'&#8212;')}</td>
+        <td><span class="mono">${esc(e?e.encounter_id:'—')}</span></td>
+        <td><span class="tag">${esc(c.code_type||'—')}</span></td>
+        <td><span class="mono">${esc(c.code_value||'—')}</span></td>
+        <td>${esc(c.code_description||'—')}</td>
         <td>${Math.round((c.confidence||0)*100)}%</td>
-        <td class="small">${esc(c.evidence||'&#8212;')}</td>
+        <td class="small">${esc(c.evidence||'—')}</td>
         <td>${statusBadge(c.status)}</td>
         <td><button class="btn sm">Review</button></td>
       </tr>`;
@@ -3072,8 +3209,8 @@ async function codeOpen(id){
     const sug = (c||[]).find(x=>x.id===id);
     if(!sug){ alert('Suggestion not found'); return; }
     let html=`<div style="margin-bottom:8px"><b>Code Type:</b> ${esc(sug.code_type)}&nbsp;&nbsp;<b>Code:</b> ${esc(sug.code_value)}&nbsp;&nbsp;<b>Confidence:</b> ${Math.round((sug.confidence||0)*100)}%</div>`;
-    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:8px 0 4px 0">Description</div><div>${esc(sug.code_description||'&#8212;')}</div>`;
-    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Evidence</div><div class="small">${esc(sug.evidence||'&#8212;')}</div>`;
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:8px 0 4px 0">Description</div><div>${esc(sug.code_description||'—')}</div>`;
+    html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:12px 0 4px 0">Evidence</div><div class="small">${esc(sug.evidence||'—')}</div>`;
     html+=`<div class="notice">Ghanaian coding context: These are demonstration codes. Actual NHIS tariff codes should be validated against current NHIS guidelines.</div>`;
     $el('modal-code-body').innerHTML=html;
     const approve=$el('code-approve'), reject=$el('code-reject'), corr=$el('code-correct');
@@ -3110,9 +3247,9 @@ async function ciLoadConfig(){
       html+=`<div class="mode-item${active?' active':''}" style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px;background:${active?'var(--accent-light)':'#fff'}">
         <div>
           <div style="font-weight:700;font-size:11px">${esc(r.facility_id||'facility')}</div>
-          <div style="font-size:10px;color:var(--muted)">Mode: ${esc(r.integration_mode||'file_based')} &bull; Status: ${esc(r.status||'demo')}</div>
+          <div style="font-size:10px;color:var(--muted)">Mode: ${esc(r.integration_mode||'file_based')} • Status: ${esc(r.status||'demo')}</div>
         </div>
-        <div style="font-size:10px;color:var(--muted)">Pending transfers: ${r.pending_transfers||0} &bull; Feedback: ${r.pending_feedback||0}</div>
+        <div style="font-size:10px;color:var(--muted)">Pending transfers: ${r.pending_transfers||0} • Feedback: ${r.pending_feedback||0}</div>
       </div>`;
     });
     $el('ci-mode-list').innerHTML = html || '<div class="empty">No integration configs.</div>';
@@ -3125,13 +3262,13 @@ async function ciLoadQueue(){
     let html='';
     (rows||[]).forEach(r=>{
       html+=`<tr>
-        <td><span class="mono small">${esc(r.claim_ref||'&#8212;')}</span></td>
-        <td class="small">${esc(r.payer_name||'&#8212;')}</td>
+        <td><span class="mono small">${esc(r.claim_ref||'—')}</span></td>
+        <td class="small">${esc(r.payer_name||'—')}</td>
         <td class="small">${fmtMoney(r.claim_amount||0)}</td>
-        <td><span class="tag">${esc(r.pnrcm_status||'&#8212;')}</span></td>
-        <td><span class="tag">${esc(r.claimit_status||'&#8212;')}</span></td>
-        <td class="small">${esc(r.last_action||'&#8212;')}</td>
-        <td class="small">${esc(r.next_action||'&#8212;')}</td>
+        <td><span class="tag">${esc(r.pnrcm_status||'—')}</span></td>
+        <td><span class="tag">${esc(r.claimit_status||'—')}</span></td>
+        <td class="small">${esc(r.last_action||'—')}</td>
+        <td class="small">${esc(r.next_action||'—')}</td>
         <td>
           <button class="btn sm" onclick="ciAction('${esc(r.id)}','export_prepare')">Prepare</button>
           <button class="btn sm" onclick="ciAction('${esc(r.id)}','transfer')">Transfer</button>
@@ -3161,12 +3298,12 @@ async function ciLoadIssues(){
     let html='';
     (rows||[]).forEach(r=>{
       html+=`<tr>
-        <td class="small">${esc(r.claim_ref||'&#8212;')}</td>
-        <td class="small">${esc(r.issue_type||'&#8212;')}</td>
-        <td><span class="tag tag-${r.severity||'low'}">${esc(r.severity||'&#8212;')}</span></td>
-        <td class="small">${esc(r.description||'&#8212;')}</td>
-        <td class="small">${esc(r.recommended_action||'&#8212;')}</td>
-        <td class="small">${esc(r.responsible_role||'&#8212;')}</td>
+        <td class="small">${esc(r.claim_ref||'—')}</td>
+        <td class="small">${esc(r.issue_type||'—')}</td>
+        <td><span class="tag tag-${r.severity||'low'}">${esc(r.severity||'—')}</span></td>
+        <td class="small">${esc(r.description||'—')}</td>
+        <td class="small">${esc(r.recommended_action||'—')}</td>
+        <td class="small">${esc(r.responsible_role||'—')}</td>
         <td><span class="tag">${esc(r.status||'open')}</span></td>
         <td><button class="btn sm" onclick="ciResolveIssue('${esc(r.id)}')">Resolve</button></td>
       </tr>`;
@@ -3188,10 +3325,10 @@ async function ciLoadFiles(){
     let html='';
     (rows||[]).forEach(r=>{
       html+=`<tr>
-        <td class="small mono">${esc(r.file_name||'&#8212;')}</td>
-        <td class="small">${esc(r.file_type||'&#8212;')}</td>
+        <td class="small mono">${esc(r.file_name||'—')}</td>
+        <td class="small">${esc(r.file_type||'—')}</td>
         <td class="small">${r.claim_count||0}</td>
-        <td><span class="tag">${esc(r.status||'&#8212;')}</span></td>
+        <td><span class="tag">${esc(r.status||'—')}</span></td>
         <td class="small">${esc((r.created_at||'').slice(0,16))}</td>
         <td>
           ${r.status==='prepared'?`<button class="btn sm" onclick="ciTransferFile('${esc(r.id)}')">Transfer</button>`:''}
@@ -3234,13 +3371,13 @@ async function ciLoadFeedback(){
     let html='';
     (rows||[]).forEach(r=>{
       html+=`<tr>
-        <td class="small mono">${esc(r.feedback_ref||'&#8212;')}</td>
-        <td class="small">${esc(r.claim_ref||'&#8212;')}</td>
-        <td class="small">${esc(r.feedback_type||'&#8212;')}</td>
-        <td class="small">${esc(r.outcome||'&#8212;')}</td>
-        <td class="small">${esc(r.details||'&#8212;')}</td>
+        <td class="small mono">${esc(r.feedback_ref||'—')}</td>
+        <td class="small">${esc(r.claim_ref||'—')}</td>
+        <td class="small">${esc(r.feedback_type||'—')}</td>
+        <td class="small">${esc(r.outcome||'—')}</td>
+        <td class="small">${esc(r.details||'—')}</td>
         <td class="small">${r.processed?'Yes':'No'}</td>
-        <td>${!r.processed?`<button class="btn sm" onclick="ciProcessFeedback('${esc(r.id)}')">Process</button>`:'&#8212;'}</td>
+        <td>${!r.processed?`<button class="btn sm" onclick="ciProcessFeedback('${esc(r.id)}')">Process</button>`:'—'}</td>
       </tr>`;
     });
     $el('ci-feedback-body').innerHTML = html || '<tr><td colspan=7 class="empty">No feedback.</td></tr>';
@@ -3262,12 +3399,12 @@ async function ciLoadLog(){
     (rows||[]).forEach(r=>{
       html+=`<tr>
         <td class="small mono">${esc((r.timestamp||'').slice(0,16))}</td>
-        <td class="small mono">${esc(r.claim_ref||'&#8212;')}</td>
-        <td class="small">${esc(r.actor||'&#8212;')}</td>
-        <td class="small">${esc(r.action||'&#8212;')}</td>
-        <td class="small">${esc(r.previous_status||'&#8212;')}</td>
-        <td class="small">${esc(r.new_status||'&#8212;')}</td>
-        <td class="small">${esc(r.evidence||'&#8212;')}</td>
+        <td class="small mono">${esc(r.claim_ref||'—')}</td>
+        <td class="small">${esc(r.actor||'—')}</td>
+        <td class="small">${esc(r.action||'—')}</td>
+        <td class="small">${esc(r.previous_status||'—')}</td>
+        <td class="small">${esc(r.new_status||'—')}</td>
+        <td class="small">${esc(r.evidence||'—')}</td>
       </tr>`;
     });
     $el('ci-log-body').innerHTML = html || '<tr><td colspan=7 class="empty">No activity.</td></tr>';
@@ -3293,7 +3430,7 @@ async function ciLoadDashboard(){
     </div>`;
     if(d.by_status&&d.by_status.length){
       html+=`<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px">By CLAIM-it Status</div>`;
-      d.by_status.forEach(s=>{ html+=`<div style="padding:4px 0"><span class="tag">${esc(s.claimit_status||'&#8212;')}</span> <span class="small float-right">${s.n||0}</span></div>`; });
+      d.by_status.forEach(s=>{ html+=`<div style="padding:4px 0"><span class="tag">${esc(s.claimit_status||'—')}</span> <span class="small float-right">${s.n||0}</span></div>`; });
     }
     $el('ci-mode-list').innerHTML = html + ($el('ci-mode-list').innerHTML||'');
   }catch(e){ alert('Error loading dashboard: '+e.message); }
